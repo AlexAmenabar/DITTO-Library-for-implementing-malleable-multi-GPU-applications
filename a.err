@@ -1,0 +1,1 @@
+/home/aamenabar/bin/bnd: line 124: 2139338 Segmentation fault      (core dumped) apptainer exec "${extra[@]}" -B "$PWD:/work" -B "$uv_dir:/uvbin:ro" --pwd /work "$sif" bash -lc "$full_script" bash "$@"
