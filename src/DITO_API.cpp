@@ -13,24 +13,19 @@
 reconfData_t *reconfData = NULL;
 int pendingReconf = 0;
 pthread_mutex_t lockPendingReconf;
+// sch thread
+pthread_t thrSch;
+
 
 // app state and reconfiguration data
 state_t *state;
 reconfData_t *appReconfData;
 
-// sch thread
-pthread_t thrSch;
 
 // DTIs
 DTI_t **arrDTI;
 size_t nDTI;
 size_t maxDTI;
-
-// data transference functions
-UserFunction *userCPU2GPUFunction;
-UserFunction *userGPU2CPUFunction;
-size_t nFuncs;
-size_t maxFuncs;
 
 
 /* DITTO initialization */
@@ -44,27 +39,25 @@ size_t maxFuncs;
 */
 void initDITTO(size_t nGPUs, size_t *idGPUs){
 
-    lockPendingReconf = PTHREAD_MUTEX_INITIALIZER;
-    //omp_init_lock(&lockPendingReconf); // initialize lock to avoid race conditions
-    reconfData = (reconf_data_t*)calloc(1, sizeof(reconf_data_t)); // initialize a global variable to store the new reconfigurations data
-    pendingReconf = 0; // no pending jobs yet
+    /* [Scheduler]: in the future should be executed in another place and communicated using MPI */
 
-    // initialize DTI
+    // initialize variables for communicating the scheduler and the application
+    lockPendingReconf = PTHREAD_MUTEX_INITIALIZER;
+    reconfData = (reconf_data_t*)calloc(1, sizeof(reconf_data_t));
+    pendingReconf = 0; 
+    // create the thread that runs the scheduler
+    pthread_create(&thrSch, NULL, runMockScheduler, NULL);
+
+
+    // initialize array of DTIs
     nDTI = 0;
     maxDTI = 10;
     arrDTI = (DTI_t**)calloc(maxDTI, sizeof(DTI_t*));
 
-    nFuncs = 0;
-    maxFuncs = 10;
-    userCPU2GPUFunction = (UserFunction*)calloc(nFuncs, sizeof(UserFunction));
-    userGPU2CPUFunction = (UserFunction*)calloc(nFuncs, sizeof(UserFunction));
 
-    // APP initialization
+    // initialize application state and reconfiguration data
     initState(nGPUs, idGPUs);
     initReconfigurationData();
-
-    // create the thread that runs the scheduler
-    pthread_create(&thrSch, NULL, runMockScheduler, NULL);
 }
 
 void initState(size_t nGPUs, size_t *idGPUs){
@@ -89,7 +82,7 @@ reconfData_t* getReconfigurationData(){
     return appReconfData;
 }
 
-void *runMockScheduler(void *arg){
+void* runMockScheduler(void *arg){
 
     // launch reconfigurations
     sleep(2);
@@ -100,37 +93,34 @@ void *runMockScheduler(void *arg){
     fflush(stdout);
 }
 
-void setCommunicationFunctions(UserFunction funcCPU2GPU, UserFunction funcGPU2CPU){
-
-    if(nFuncs == maxFuncs){
-        
-        maxFuncs *= 2;
-        UserFunction *funcCPU2GPUExp = (UserFunction*)calloc(maxFuncs, sizeof(UserFunction));
-        UserFunction *funcGPU2CPUExp = (UserFunction*)calloc(maxFuncs, sizeof(UserFunction));
-
-        for(size_t i = 0; i<nFuncs; i++){
-            funcCPU2GPUExp[i] = userCPU2GPUFunction[i];
-            funcGPU2CPUExp[i] = userGPU2CPUFunction[i];
-        }
-
-        free(userCPU2GPUFunction);
-        free(userGPU2CPUFunction);
-
-        userCPU2GPUFunction = funcCPU2GPUExp;
-        userGPU2CPUFunction = funcGPU2CPUExp;
-    }
-
-    // add new functions
-    userCPU2GPUFunction[nFuncs] = funcCPU2GPU;
-    userGPU2CPUFunction[nFuncs] = funcGPU2CPU;
-    nFuncs += 1;
-}
-
-
-DTI_t* createDTI(void* cpuData, size_t N, size_t size, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
+/*DTI_t* createDTI(void* cpuData, size_t N, size_t size, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
 
     // call DDM function to initialize the DTI
     DTI_t *DTI = initializeDTI(cpuData, N, size, tpttEnum, rmEnum);
+
+    // add DTI to the global array of DTIs
+    addDTI(DTI);
+
+    // return DTI structure
+    return DTI;
+}*/
+
+DTI_t* createAutomaticDTI(void* cpuData, size_t N, size_t size, const char* name, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
+
+    // call DDM function to initialize the DTI
+    DTI_t *DTI = initializeDTI(0, cpuData, N, size, name, NULL, NULL, tpttEnum, rmEnum);
+
+    // add DTI to the global array of DTIs
+    addDTI(DTI);
+
+    // return DTI structure
+    return DTI;
+}
+
+DTI_t* createManualDTI(void* cpuData, size_t N, size_t size, const char *name, GenericFunction cpu2gpu, GenericFunction gpu2cpu){
+
+    // call DDM function to initialize the DTI
+    DTI_t *DTI = initializeDTI(1, cpuData, N, size, name, cpu2gpu, gpu2cpu, nonettp, nonerme);
 
     // add DTI to the global array of DTIs
     addDTI(DTI);
@@ -161,6 +151,22 @@ void addDTI(DTI_t *DTI){
     // add new DTI
     arrDTI[nDTI] = DTI;
     nDTI += 1;
+}
+
+DTI_t* getDTI(const char *dtiName){
+
+    size_t i = 0;
+    int found = 0;
+
+    while(!found && i < nDTI){
+
+        if(arrDTI[i]->name == dtiName){
+            return arrDTI[i];
+        }
+    }
+    
+    // not found
+    return NULL;
 }
 
 
@@ -249,8 +255,8 @@ void reconfigure(){
     // move data from the GPUs to the CPU
     transferDataGPU2CPU(NULL, NULL, NULL); // move data from the GPUs to the CPU
     
-    // configure the DTIs
-    configureDTI(arrDTI[0], appReconfData->nGPUs, state->nGPUs, NULL, NULL);
+    // configure DTIs
+    reconfigureDTIs(appReconfData->nGPUs, state->nGPUs);
     
     // update state
     state->nGPUs = appReconfData->nGPUs;
@@ -267,6 +273,7 @@ void reconfigure(){
     transferDataCPU2GPU(NULL, NULL, NULL);
 
     // reconfigure the kernels
+    reconfigureKernels(NULL, NULL);
 
 
     // notify that the reconfiguration has finished
@@ -275,9 +282,20 @@ void reconfigure(){
     printf(" -- Reconfiguration done!\n");
 }
 
-void reconfigureKernels(){
+void reconfigureDTIs(size_t nGPUs, size_t nOldGPUs){
 
-    printf("");
+    size_t i;
+    for(i = 0; i<nDTI; i++){
+
+        configureDTI(arrDTI[i], nGPUs, nOldGPUs, NULL, NULL);
+    }
+}
+
+void* reconfigureKernels(GenericFunction f, void* params){
+
+    if(f != NULL)
+        return f(params);
+    return NULL;
 }
 
 state_t* storeState(state_t *state){
@@ -290,7 +308,7 @@ state_t* storeState(state_t *state){
 
 /* [Data transmission] */
 
-void* transferDataCPU2GPU(UserFunction userFunction, void* ret, void* args){
+void* transferDataCPU2GPU(GenericFunction f, void* ret, void* args){
 
     size_t i;
 
@@ -299,14 +317,17 @@ void* transferDataCPU2GPU(UserFunction userFunction, void* ret, void* args){
     for(i = 0; i<nDTI; i++){
 
         // call the DTM module for copying data to CUDA
-        cpyDataCPU2GPU(arrDTI[i]);
+        if(arrDTI[i]->type > 0)
+            arrDTI[i]->moveCPU2GPU(arrDTI[i]);
+        else
+            cpyDataCPU2GPU(arrDTI[i]);
     }
 
-    ret = userFunction(args);
-    return ret;
+    //ret = f(args);
+    return NULL;
 }
 
-void* transferDataGPU2CPU(UserFunction userFunction, void* ret, void* args){
+void* transferDataGPU2CPU(GenericFunction f, void* ret, void* args){
     
     size_t i;
 
@@ -314,20 +335,13 @@ void* transferDataGPU2CPU(UserFunction userFunction, void* ret, void* args){
 
     for(i = 0; i<nDTI; i++){
 
-        // call the DTM module for copying data to CUDA
-        cpyDataGPU2CPU(arrDTI[i]);
+        // call the DTM module for copying data from CUDA to the CPu
+        if(arrDTI[i]->type > 0)
+            arrDTI[i]->moveGPU2CPU(arrDTI[i]);
+        else
+            cpyDataGPU2CPU(arrDTI[i]);
     }
     
-    ret = userFunction(args);
-    return ret;
+    //ret = f(args);
+    return NULL;
 }
-
-// tmemp?
-/*template<typename Func, typename... Args>
-void* transferDataCPU2GPU_impl(Func f, Args... args)
-{
-    for(size_t i = 0; i < nDTI; i++)
-        cpyDataCPU2GPU(arrDTI[i]);
-
-    return f(args...);
-}*/

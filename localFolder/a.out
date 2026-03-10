@@ -1,0 +1,24 @@
+ -- Starting data transference
+ CPU2GPU ==> nDTI = 1
+ Printing cData = 0 1 2 3 4 
+ -- Data transference done!
+0 1 2 3 4  -- Pending reconfiguration = 0, number of GPUs = 2
+ nGPUs = 2
+ -- 0 iteration done in GPU 0
+ -- 0 iteration done in GPU 1
+ Notifying reconfiguration
+ Reconfiguration notified
+ -- Pending reconfiguration = 1, number of GPUs = 2
+ GPU2CPU ==> nDTI = 1
+ Printing cData = 0 2 4 6 8 
+ CPU2GPU ==> nDTI = 1
+ Printing cData = 0 2 4 6 8 
+ -- Reconfiguration done!
+ nGPUs = 4
+ -- 1 iteration done in GPU 0
+ -- 1 iteration done in GPU 1
+ -- 1 iteration done in GPU 2
+ -- 1 iteration done in GPU 3
+ GPU2CPU ==> nDTI = 1
+ Printing cData = 0 4 8 12 16 
+0 4 8 12 16 

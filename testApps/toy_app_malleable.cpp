@@ -143,11 +143,12 @@ int main(int argc, char* argv[]){
     }
 
     // Initialize DTIs for automatically managing CPU-GPU communications
-    DTI_t *appDataDTI = createDTI((void*)(appData->arr), appData->N, sizeof(int), simple, ordered);
+    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(int), "appData", simple, ordered);
 
     // configure all DTIs for automatic data transference
     configureDTI(appDataDTI, 2, 0, NULL, NULL);
 
+    
     // send data to the GPU
     printf(" -- Starting data transference\n");
     fflush(stdout);

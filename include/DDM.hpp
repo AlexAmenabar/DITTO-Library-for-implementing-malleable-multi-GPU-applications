@@ -8,8 +8,12 @@
 
 #include <type_traits>
 
+typedef void* (*GenericFunction)(void*);
+
 /// @brief Enumeration that indicates the pattern for distributing data along GPUs
 enum transmissionPatternsEnum {
+    
+    nonettp,
     all,
     simple,
     complex,
@@ -19,6 +23,7 @@ enum transmissionPatternsEnum {
 /// @brief Enum indicating what to do with the remaining elements (nElements % nGPUs)
 enum remainingElementsEnum {
     
+    nonerme,
     first,
     ordered,
     last
@@ -50,13 +55,26 @@ typedef struct infoCustomDTI_t{
 /// a set of partitions
 typedef struct DTI_t {
 
+    // 0: automatically managed arrays, 1: manually managed arrays; 2: manually managed structures (SoA...)
+    int type;
+
+    // pointers to CPU and GPU data
     void **gpuData; // [n_GPUS] pointers to device arrays
     void *cpuData; // array on the CPU
-    size_t N; // number of elements in the CPU array
     size_t size; // size of the data type
-
+    const char* name; // name of the DTI
+    
+    // number of elements in the CPU: number of elements in array, or struct, or whatever
+    size_t N; // number of elements in the CPU array (if it is an array)
+    
+    // number of GPUs used during the DTI tranmission
     size_t nGPUs;
 
+    // function to perform the data communications
+    GenericFunction moveCPU2GPU;
+    GenericFunction moveGPU2CPU;
+
+    // Helper information for managing communications in array-based 
     infoComplexDTI_t *infoComplex;
     infoCustomDTI_t *infoCustom;
 
@@ -72,7 +90,7 @@ typedef struct DTI_t {
 * Function to create the DTI structure for managing the communications between CPU and GPU
 */
 
-DTI_t* initializeDTI(void* cpuData, size_t N, size_t size, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum);
+DTI_t* initializeDTI(size_t type, void* cpuData, size_t N, size_t size, const char* name, GenericFunction cpu2gpu, GenericFunction gpu2cpu, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum);
 
 void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs, infoComplexDTI_t *infoComplex, infoCustomDTI_t *infoCustom);
 

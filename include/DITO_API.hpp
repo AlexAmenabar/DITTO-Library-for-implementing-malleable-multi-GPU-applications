@@ -23,29 +23,25 @@ typedef struct reconfData_t {
 } reconf_data_t;
 
 // declare a type to represent userFunctions for data transmission
-typedef void* (*UserFunction)(void*);
+typedef void* (*GenericFunction)(void*);
 
 
+// global variables
 extern reconfData_t *reconfData;
 extern int pendingReconf;
 extern pthread_mutex_t lockPendingReconf;
-
-extern state_t *state;
-extern reconfData_t *appReconfData;
-
 // sch
 extern pthread_t thrSch;
 
-// DTIs
+// Application data: state and reconfiguration data
+extern state_t *state;
+extern reconfData_t *appReconfData;
+
+// DTIs: manage data transmissions
 extern DTI_t **arrDTI;
 extern size_t nDTI;
 extern size_t maxDTI;
 
-// data transference functions
-extern UserFunction *userCPU2GPUFunction;
-extern UserFunction *userGPU2CPUFunction;
-extern size_t nFuncs;
-extern size_t maxFuncs;
 
 
 /* DITTO initialization */
@@ -61,30 +57,47 @@ extern size_t maxFuncs;
 * @param[in] idGPUs Identifiers of the GPUs
 */
 void initDITTO(size_t nGPUs, size_t *idGPUs);
+
+// initialize application structure
 void initState(size_t nGPUs, size_t *idGPUs);
+
+// get the state structure
 state_t* getState();
+
+// init reconfiguration data
 void initReconfigurationData();
+
+// Get reconfiguration data: return the appReconfData structure
 reconfData_t* getReconfigurationData();
+
+// Run mock scheduler to launch reconfigurations
 void *runMockScheduler(void *arg);
 
-// automatize in the future
-void setCommunicationFunctions(UserFunction funcCPU2GPU, UserFunction funcGPU2CPU);
-
-
-DTI_t* createDTI(void* cpuData, size_t N, size_t size, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum);
+// create DTI for automatically handling data transmissions
+DTI_t* createAutomaticDTI(void* cpuData, size_t N, size_t size, const char* name, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum);
+DTI_t* createManualDTI(void* cpuData, size_t N, size_t size, const char *name, GenericFunction cpu2gpu, GenericFunction gpu2cpu);
 void addDTI(DTI_t *DTI);
+DTI_t* getDTI(const char *dtiName);
 
 /* [Reconfigurations] */
+
+// Scheduler notifies that there is a pending reconfiguration
 void notifyReconfiguration(size_t nGPUs, size_t *idGPUs, size_t *src, size_t *dst);
+
+// application checks whether there is any pending reconfiguration
 int checIfkReconfiguration();
+
+// application notifies that reconfiguration finished
 void notifyReconfigurationDone();
 
 void reconfigure();
-void reconfigureKernels();
+void reconfigureDTIs(size_t nGPUs, size_t nOldGPUs);
+void* reconfigureKernels(GenericFunction f, void* params);
+
 state_t* storeState(state_t *state);
 
 /* [Data transmission] */
-void* transferDataCPU2GPU(UserFunction userFunction, void *ret, void* args);
-void* transferDataGPU2CPU(UserFunction userFunction, void *ret, void* args);
+void* transferDataCPU2GPU(GenericFunction userFunction, void *ret, void* args);
+void* transferDataGPU2CPU(GenericFunction userFunction, void *ret, void* args);
 
 #endif

@@ -1,19 +1,28 @@
 #include "DDM.hpp"
+#include "DTM.hpp"
 
 /**
     [DATA DISTRIBUTION MODULE]
 */
 
-DTI_t* initializeDTI(void* cpuData, size_t N, size_t size, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
+DTI_t* initializeDTI(size_t type, void* cpuData, size_t N, size_t size, const char* name, GenericFunction cpu2gpu, GenericFunction gpu2cpu, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
 
     DTI_t *DTI = (DTI_t*)calloc(1, sizeof(DTI_t));
     infoCustomDTI_t *infoCustomDTI = DTI->infoCustom;
+
+    DTI->type = type;
 
     // store DTI data
     DTI->cpuData = cpuData; // point to CPU data array
     DTI->N = N;
     DTI->size = size;
+    DTI->name = name;
 
+    // function pointers
+    DTI->moveCPU2GPU = cpu2gpu;
+    DTI->moveGPU2CPU = gpu2cpu;
+
+    // allocate memory for data redistribution information
     DTI->infoComplex = (infoComplexDTI_t*)calloc(1, sizeof(infoComplexDTI_t));
     DTI->infoCustom = (infoCustomDTI_t*)calloc(1, sizeof(infoCustomDTI_t));
 
@@ -28,60 +37,65 @@ void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs, infoComplexDTI_t *i
 
     DTI->nGPUs = nGPUs;
 
-    infoComplexDTI_t *infoComplexDTI = DTI->infoComplex;
-    infoCustomDTI_t *infoCustomDTI = DTI->infoCustom;
+    // configure DTI only if DTI is automatic, else, functions are responsible of correctlu
+    // deciding how to move data depending on the number of GPUs
+    if(DTI->type == 0){
 
-    // allocate memory for GPU pointers
-    if(DTI->gpuData) free(DTI->gpuData);
-    DTI->gpuData = (void**)calloc(nGPUs, sizeof(void*));
+        infoComplexDTI_t *infoComplexDTI = DTI->infoComplex;
+        infoCustomDTI_t *infoCustomDTI = DTI->infoCustom;
 
-    // deallocate memory allocated in previous configuration
-    if(infoComplexDTI && infoComplexDTI->n) free(infoComplexDTI->n);
-    if(infoComplexDTI && infoComplexDTI->j) free(infoComplexDTI->j);
-    if(infoComplexDTI && infoComplexDTI->off) free(infoComplexDTI->off);
-    if(infoComplexDTI && infoComplexDTI->tn) free(infoComplexDTI->tn);
+        // allocate memory for GPU pointers
+        if(DTI->gpuData) free(DTI->gpuData);
+        DTI->gpuData = (void**)calloc(nGPUs, sizeof(void*));
+
+        // deallocate memory allocated in previous configuration
+        if(infoComplexDTI && infoComplexDTI->n) free(infoComplexDTI->n);
+        if(infoComplexDTI && infoComplexDTI->j) free(infoComplexDTI->j);
+        if(infoComplexDTI && infoComplexDTI->off) free(infoComplexDTI->off);
+        if(infoComplexDTI && infoComplexDTI->tn) free(infoComplexDTI->tn);
 
 
-    if(infoCustomDTI && infoCustomDTI->nElementsPerGPU) free(infoCustomDTI->nElementsPerGPU);
-    if(infoCustomDTI && infoCustomDTI->nPartitionsPerGPU) free(infoCustomDTI->nPartitionsPerGPU);
-    if(infoCustomDTI && infoCustomDTI->nElementsPerPartition) {
+        if(infoCustomDTI && infoCustomDTI->nElementsPerGPU) free(infoCustomDTI->nElementsPerGPU);
+        if(infoCustomDTI && infoCustomDTI->nPartitionsPerGPU) free(infoCustomDTI->nPartitionsPerGPU);
+        if(infoCustomDTI && infoCustomDTI->nElementsPerPartition) {
 
-        for(size_t i = 0; i<nOldGPUs; i++){
+            for(size_t i = 0; i<nOldGPUs; i++){
 
-            if(infoCustomDTI->nElementsPerPartition[i]) free(infoCustomDTI->nElementsPerPartition[i]);
+                if(infoCustomDTI->nElementsPerPartition[i]) free(infoCustomDTI->nElementsPerPartition[i]);
+            }
+            free(infoCustomDTI->nElementsPerPartition);   
         }
-        free(infoCustomDTI->nElementsPerPartition);   
-    }
 
-    if(infoCustomDTI && infoCustomDTI->firstElementPerPartition) {
+        if(infoCustomDTI && infoCustomDTI->firstElementPerPartition) {
 
-        for(size_t i = 0; i<nOldGPUs; i++){
+            for(size_t i = 0; i<nOldGPUs; i++){
 
-            if(infoCustomDTI->firstElementPerPartition[i]) free(infoCustomDTI->firstElementPerPartition[i]);
-        }  
-        free(infoCustomDTI->firstElementPerPartition); 
-    }
+                if(infoCustomDTI->firstElementPerPartition[i]) free(infoCustomDTI->firstElementPerPartition[i]);
+            }  
+            free(infoCustomDTI->firstElementPerPartition); 
+        }
 
 
-    // decide how to redistribute the data
-    switch (DTI->tpttEnum){
-        case all:
-            configureEntireTransmission(DTI);
-            break;
+        // decide how to redistribute the data
+        switch (DTI->tpttEnum){
+            case all:
+                configureEntireTransmission(DTI);
+                break;
 
-        case simple:
-            configureSimpleTransmission(DTI);
-            break;
+            case simple:
+                configureSimpleTransmission(DTI);
+                break;
 
-        case complex:
-            DTI->infoComplex = infoComplex;
-            configureComplexTransmission(DTI);
-            break;
+            case complex:
+                DTI->infoComplex = infoComplex;
+                configureComplexTransmission(DTI);
+                break;
 
-        case custom:
-            DTI->infoCustom = infoCustom;
-            configureCustomTransmission(DTI);
-            break;
+            case custom:
+                DTI->infoCustom = infoCustom;
+                configureCustomTransmission(DTI);
+                break;
+        }
     }
 }
 
