@@ -6,26 +6,35 @@
 #include <pthread.h>
 
 #include "DITO_API.hpp"
+#include "priv_DITTO_API.hpp"
 #include "DDM.hpp"
 #include "DTM.hpp"
-
-// scheduler coomunication
-reconfData_t *reconfData = NULL;
-int pendingReconf = 0;
-pthread_mutex_t lockPendingReconf;
-// sch thread
-pthread_t thrSch;
+#include "mockSch.hpp"
 
 
-// app state and reconfiguration data
-state_t *state;
-reconfData_t *appReconfData;
+/* [Global variables] */
 
+// App Data
+public_APP_data_t *appData = NULL;
 
 // DTIs
-DTI_t **arrDTI;
-size_t nDTI;
-size_t maxDTI;
+size_t nDTI, maxDTI;
+DTI_t** arrDTI = NULL;
+
+
+/**
+=================================================
+|| PUBLIC DITTO API: APP - DITTO COMMUNICATION ||
+=================================================
+*/
+
+
+
+/*
+==========
+| PUBLIC |
+==========
+*/
 
 
 /* DITTO initialization */
@@ -37,90 +46,226 @@ size_t maxDTI;
 * which uses a lock variable to avoid race conditions when writing global variables. 
 *
 */
-void initDITTO(size_t nGPUs, size_t *idGPUs){
+void initDITTO(void *jobControl){
 
-    /* [Scheduler]: in the future should be executed in another place and communicated using MPI */
+    // allocate memory for appData structure
+    appData = (public_APP_Data_t*)calloc(1, sizeof(public_APP_Data_t));
+    
+    // initialize reconfiguration related variables
+    appData->pendingReconf = 0; // indicates whether there is any pending reconfiguration
+    appData->lockPendingReconf = PTHREAD_MUTEX_INITIALIZER; // initialize lock
+    //appData->reconfData = initReconfigurationData(); // initialize structure for storing storeing reconfiguration data
+    appData->jobControl = (jobControl_t*)jobControl; // communication with the scheduler
 
-    // initialize variables for communicating the scheduler and the application
-    lockPendingReconf = PTHREAD_MUTEX_INITIALIZER;
-    reconfData = (reconf_data_t*)calloc(1, sizeof(reconf_data_t));
-    pendingReconf = 0; 
-    // create the thread that runs the scheduler
-    pthread_create(&thrSch, NULL, runMockScheduler, NULL);
+    // initialize application state // TODO: probably it should be a function
+    appData->state = initState(appData->jobControl->nGPUs, appData->jobControl->idGPUs);
 
 
     // initialize array of DTIs
     nDTI = 0;
     maxDTI = 10;
     arrDTI = (DTI_t**)calloc(maxDTI, sizeof(DTI_t*));
-
-
-    // initialize application state and reconfiguration data
-    initState(nGPUs, idGPUs);
-    initReconfigurationData();
 }
 
-void initState(size_t nGPUs, size_t *idGPUs){
+void freeDITTO(){
 
-    state = (state_t*)calloc(1,sizeof(state_t));
-    state->nGPUs = nGPUs;
-    state->idGPUs = idGPUs;
+    printf(" -- Not implemented yet!\n");
+
+    // free appData, 
 }
 
 state_t* getState(){
 
+    return appData->state;
+}
+
+/*reconfData_t* getReconfigurationData(){
+
+    return appData->reconfData;
+}*/
+
+size_t getNumberOfGPUs(){
+
+    return getState()->nGPUs;
+}
+
+size_t* getGPUIds(){
+
+    return getState()->idGPUs;
+}
+
+state_t* updateState(state_t *state, jobControl_t *jobControl){
+    
+    size_t i, nGPUs, *idGPUs;
+
+    nGPUs = jobControl->nGPUs;
+    idGPUs = jobControl->idGPUs;
+
+    // update state (copy number of GPUs and GPU ids)
+    state->nGPUs = nGPUs;
+
+    if(state->idGPUs) 
+        free(state->idGPUs);
+
+    state->idGPUs = (size_t*)malloc(nGPUs * sizeof(size_t));
+    for(i = 0; i<nGPUs; i++)
+        state->idGPUs[i] = idGPUs[i];
+
     return state;
 }
 
-void initReconfigurationData(){
+state_t* storeState(state_t *state){
 
-    appReconfData = (reconf_data_t*)calloc(1,sizeof(reconf_data_t));
+    printf(" -- Store state not implemented yet\n");
+    return state;
 }
 
-reconfData_t* getReconfigurationData(){
 
-    return appReconfData;
+
+/* [Reconfigurations] */
+
+// scheduler notifies the application a new reconfiguration
+void notifyReconfiguration(size_t nGPUs, size_t *idGPUs){
+
+    size_t i;
+    state_t *state = getState();
+    public_APP_Data_t *appData = appData;
+
+    // lock
+    pthread_mutex_lock(&(appData->lockPendingReconf));
+
+    // program the reconfiguration if there are no pending reconfigurations
+    if(appData->pendingReconf == 0){
+
+        state->nGPUs = nGPUs;
+
+        if(state->idGPUs) 
+            free(state->idGPUs);
+ 
+        state->idGPUs = (size_t*)calloc(nGPUs, sizeof(size_t));
+
+        for(i = 0; i<nGPUs; i++)
+            state->idGPUs[i] = i;
+        
+
+        // new pending reconfiguration
+        appData->pendingReconf = 1;
+    }
+
+    // unlock
+    pthread_mutex_unlock(&(appData->lockPendingReconf));
 }
 
-void* runMockScheduler(void *arg){
+// application checks whether there is a pending reconfiguration
+int checIfkReconfiguration(){
 
-    // launch reconfigurations
-    sleep(2);
-    printf(" Notifying reconfiguration\n");
-    fflush(stdout);
-    notifyReconfiguration(4, NULL, NULL, NULL);
-    printf(" Reconfiguration notified\n");
-    fflush(stdout);
+    public_APP_Data_t *appData = appData;
+    int localPendingReconf;
+
+    pthread_mutex_lock(&(appData->lockPendingReconf));
+    localPendingReconf = appData->pendingReconf;
+    pthread_mutex_unlock(&appData->lockPendingReconf);
+
+    return appData->pendingReconf;
 }
 
-/*DTI_t* createDTI(void* cpuData, size_t N, size_t size, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
+// application notifies reconfiguration finished
+void notifyReconfigurationDone(){
+
+    public_APP_Data_t *appData = appData;
+
+    pthread_mutex_lock(&(appData->lockPendingReconf));
+
+    // reconfiguration done
+    appData->pendingReconf = 0;
+
+    pthread_mutex_unlock(&(appData->lockPendingReconf));
+}
+
+
+/**
+* Function to perform the application reconfiguration
+*
+* The function perform the complete reconfiguration process by first reconfiguring the data by moving from the GPU to the CPU,
+* deciding how to redistribute it and moving again to the GPU. Then, kernels are reconfigured and finally the scheduler is informed
+* that the reconfiguration is done.
+* 
+* 
+*/
+void reconfigure(){
+
+    state_t *state = getState();
+    jobControl_t *jobControl = appData->jobControl;
+
+    // move data from the GPUs to the CPU
+    transferDataGPU2CPU(); // move data from the GPUs to the CPU
+    
+    size_t nOldGPUs, nGPUs;
+
+    // number of GPUs before reconfiguration
+    nOldGPUs = state->nGPUs;
+
+    // update state
+    updateState(state, jobControl);
+
+    // number of GPUs after reconfiguration
+    nGPUs = state->nGPUs;
+
+    // [option to update descriptions depending on the number of GPUs???]
+
+    // configure DTIs
+    reconfigureDTIs(nGPUs, nOldGPUs);
+    
+    // move data again from the CPU to the GPU
+    transferDataCPU2GPU();
+
+    // reconfigure the kernels
+    reconfigureKernels(NULL, NULL);
+
+    // notify that the reconfiguration has finished
+    notifyReconfigurationDone();
+
+    printf(" -- Reconfiguration done!\n");
+}
+
+void reconfigureDTIs(size_t nGPUs, size_t nOldGPUs){
+
+    size_t i;
+    for(i = 0; i<nDTI; i++){
+
+        redistributeDTI(arrDTI[i], nGPUs, nOldGPUs);
+    }
+}
+
+void* reconfigureKernels(GenericFunction f, void* params){
+
+    // if there is a function for reconfigurating the kernels,
+    // run, else, return NULL
+    if(f != NULL)
+        return f(params);
+
+    return NULL;
+}
+
+
+/* [DTIs] */
+
+DTI_t* createAutomaticDTI(void* cpuData, size_t N, size_t size, const char* name, DTIDesctiption_t *description){
 
     // call DDM function to initialize the DTI
-    DTI_t *DTI = initializeDTI(cpuData, N, size, tpttEnum, rmEnum);
+    DTI_t *DTI = initializeDTI(0, 0, cpuData, NULL, N, size, name, NULL, NULL, description);
 
     // add DTI to the global array of DTIs
     addDTI(DTI);
 
     // return DTI structure
     return DTI;
-}*/
-
-DTI_t* createAutomaticDTI(void* cpuData, size_t N, size_t size, const char* name, transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
-
-    // call DDM function to initialize the DTI
-    DTI_t *DTI = initializeDTI(0, cpuData, N, size, name, NULL, NULL, tpttEnum, rmEnum);
-
-    // add DTI to the global array of DTIs
-    addDTI(DTI);
-
-    // return DTI structure
-    return DTI;
 }
 
-DTI_t* createManualDTI(void* cpuData, size_t N, size_t size, const char *name, GenericFunction cpu2gpu, GenericFunction gpu2cpu){
+DTI_t* createManualDTI(void* cpuData, void** gpuData, size_t N, size_t size, const char *name, GenericFunction cpu2gpu, GenericFunction gpu2cpu){
 
     // call DDM function to initialize the DTI
-    DTI_t *DTI = initializeDTI(1, cpuData, N, size, name, cpu2gpu, gpu2cpu, nonettp, nonerme);
+    DTI_t *DTI = initializeDTI(1, 0, cpuData, gpuData, N, size, name, cpu2gpu, gpu2cpu, NULL);
 
     // add DTI to the global array of DTIs
     addDTI(DTI);
@@ -169,138 +314,103 @@ DTI_t* getDTI(const char *dtiName){
     return NULL;
 }
 
+DTI_t* getDTIByIndex(int i){
 
-
-/* [Reconfigurations] */
-
-void notifyReconfiguration(size_t nGPUs, size_t *idGPUs, size_t *src, size_t *dst){
-
-    // lock
-    pthread_mutex_lock(&lockPendingReconf);
-
-    // program the reconfiguration if there are no pending reconfigurations
-    if(pendingReconf == 0){
-
-        // store data for the new reconfiguration in the global variable: number of GPUs and identifiers
-        reconfData->nGPUs = nGPUs;
-
-        if(reconfData->idGPUs) free(reconfData->idGPUs);
-        reconfData->idGPUs = (size_t*)calloc(nGPUs, sizeof(size_t));
-
-        for(size_t i = 0; i<nGPUs; i++){
-            
-            reconfData->idGPUs[i] = i;
-        }
-        
-        // new pending reconfiguration
-        pendingReconf = 1;
-    }
-
-    // unlock
-    pthread_mutex_unlock(&lockPendingReconf);
-}
-
-int checIfkReconfiguration(){
-
-    int localPendingReconf;
-
-    pthread_mutex_lock(&lockPendingReconf);
-
-    // check if there is any pending reconfiguration
-    if(pendingReconf == 1){
-
-        // copy data from the global reconfData, used by the scheduler, to the local reconfiguration data
-        appReconfData->nGPUs = reconfData->nGPUs;
-
-        // free old GPU ids of the appReconfData
-        if(appReconfData && appReconfData->idGPUs) free(appReconfData->idGPUs);
-
-        // allocate and copy
-        appReconfData->idGPUs = (size_t*)malloc(appReconfData->nGPUs * sizeof(size_t));
-        for(size_t i = 0; i<appReconfData->nGPUs; i++){
-            
-            appReconfData->idGPUs[i] = reconfData->idGPUs[i]; 
-        }
-    }
-
-    localPendingReconf = pendingReconf;
-
-    pthread_mutex_unlock(&lockPendingReconf);
-
-    return localPendingReconf;
-}
-
-void notifyReconfigurationDone(){
-
-    pthread_mutex_lock(&lockPendingReconf);
-
-    // reconfiguration done
-    pendingReconf = 0;
-
-    pthread_mutex_unlock(&lockPendingReconf);
-}
-
-
-/**
-* Function to perform the application reconfiguration
-*
-* The function perform the complete reconfiguration process by first reconfiguring the data by moving from the GPU to the CPU,
-* deciding how to redistribute it and moving again to the GPU. Then, kernels are reconfigured and finally the scheduler is informed
-* that the reconfiguration is done.
-* 
-* 
-*/
-void reconfigure(){
-
-    // move data from the GPUs to the CPU
-    transferDataGPU2CPU(NULL, NULL, NULL); // move data from the GPUs to the CPU
-    
-    // configure DTIs
-    reconfigureDTIs(appReconfData->nGPUs, state->nGPUs);
-    
-    // update state
-    state->nGPUs = appReconfData->nGPUs;
-
-    if(state->idGPUs) free(state->idGPUs);
-
-    state->idGPUs = (size_t*)malloc(appReconfData->nGPUs * sizeof(size_t));
-    for(size_t i = 0; i<appReconfData->nGPUs; i++){
-
-        state->idGPUs[i] = appReconfData->idGPUs[i];
-    }
-
-    // move data again from the CPU to the GPU
-    transferDataCPU2GPU(NULL, NULL, NULL);
-
-    // reconfigure the kernels
-    reconfigureKernels(NULL, NULL);
-
-
-    // notify that the reconfiguration has finished
-    notifyReconfigurationDone();
-
-    printf(" -- Reconfiguration done!\n");
-}
-
-void reconfigureDTIs(size_t nGPUs, size_t nOldGPUs){
-
-    size_t i;
-    for(i = 0; i<nDTI; i++){
-
-        configureDTI(arrDTI[i], nGPUs, nOldGPUs, NULL, NULL);
-    }
-}
-
-void* reconfigureKernels(GenericFunction f, void* params){
-
-    if(f != NULL)
-        return f(params);
+    if(i<maxDTI)
+        return arrDTI[i];
     return NULL;
 }
 
-state_t* storeState(state_t *state){
-    return NULL;
+void setfDTICPU2GPU(DTI_t *DTI, GenericFunction f){
+
+    DTI->moveCPU2GPU = f;
 }
+
+void setfDTIGPU2CPU(DTI_t *DTI, GenericFunction f){
+
+    DTI->moveGPU2CPU = f;
+}
+
+void setDTIDescription(DTI_t *DTI, DTIDesctiption_t *description){
+
+    DTI->description = description;
+}
+
+
+DTIDesctiption_t* getDTIDescription(DTI_t *DTI){
+
+    return DTI->description;
+}
+
+void setCPUData(DTI_t *DTI, void* cpuData){
+
+    DTI->cpuData = cpuData;
+}
+
+void* getCPUData(DTI_t *DTI){
+
+    return DTI->cpuData;
+}
+
+void setMultiGPUData(DTI_t *DTI, void** gpuData){
+
+    DTI->gpuData = gpuData;
+}
+
+void** getMultiGPUData(DTI_t *DTI){
+
+    return DTI->gpuData;
+}
+
+void setGPUData(DTI_t *DTI, void *gpuData, int i){
+
+    DTI->gpuData[i] = gpuData;
+}
+
+void* getGPUData(DTI_t *DTI, int i){
+
+    return DTI->gpuData[i];
+}
+
+DTIDesctiption_t* initializeDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
+
+    DTIDesctiption_t *description = (DTIDesctiption_t*)calloc(1, sizeof(DTIDesctiption_t));
+
+    if(tpttEnum != all && tpttEnum != simple){
+
+        printf(" -- 'initializeDTIDescription' only supports 'all' and 'simple' options. Use 'initializeComplexDTIDescription' or 'initializeCustomDTIDescription' instead.\n");
+        return NULL;
+    }
+
+    description->tpttEnum = tpttEnum;
+    description->rmEnum = rmEnum;
+
+    return description;
+}
+
+void printDTI(DTI_t *DTI){
+
+    size_t i, j;
+    state_t *state = getState();
+    size_t nGPUs = state->nGPUs;
+    DTIDesctiption_t *description = DTI->description;
+
+    for(i = 0; i<nGPUs; i++){
+
+        printf(" -- Printing GPU %zu data --\n", i);
+
+        printf("     Number of partitions = %zu\n", description->nPartitionsPerGPU[i]);
+        printf("     Number of elements   = %zu\n", description->nElementsPerGPU[i]);
+
+        for(j = 0; j<description->nPartitionsPerGPU[i]; j++){
+            printf("     Number of elements in partition %zu = %zu\n", j, description->nElementsPerPartition[i][j]);
+            printf("     First element of partition %zu = %zu\n", j, description->firstElementPerPartition[i][j]);
+        }
+        printf("\n");
+    }
+    fflush(stdout);
+}
+
 
 /* [Scheduler communication: notification signals] */
 
@@ -308,7 +418,7 @@ state_t* storeState(state_t *state){
 
 /* [Data transmission] */
 
-void* transferDataCPU2GPU(GenericFunction f, void* ret, void* args){
+void transferDataCPU2GPU(){
 
     size_t i;
 
@@ -316,18 +426,15 @@ void* transferDataCPU2GPU(GenericFunction f, void* ret, void* args){
 
     for(i = 0; i<nDTI; i++){
 
-        // call the DTM module for copying data to CUDA
-        if(arrDTI[i]->type > 0)
-            arrDTI[i]->moveCPU2GPU(arrDTI[i]);
-        else
+        // if automatic, call DTM for moving data. Else, call user-defined function
+        if(arrDTI[i]->type == 0)
             cpyDataCPU2GPU(arrDTI[i]);
+        else
+            arrDTI[i]->moveCPU2GPU(arrDTI[i]);
     }
-
-    //ret = f(args);
-    return NULL;
 }
 
-void* transferDataGPU2CPU(GenericFunction f, void* ret, void* args){
+void transferDataGPU2CPU(){
     
     size_t i;
 
@@ -335,13 +442,139 @@ void* transferDataGPU2CPU(GenericFunction f, void* ret, void* args){
 
     for(i = 0; i<nDTI; i++){
 
-        // call the DTM module for copying data from CUDA to the CPu
-        if(arrDTI[i]->type > 0)
-            arrDTI[i]->moveGPU2CPU(arrDTI[i]);
-        else
+        // if automatic, call DTM for moving data. Else, call user-defined function
+        if(arrDTI[i]->type == 0)
             cpyDataGPU2CPU(arrDTI[i]);
+        else
+            arrDTI[i]->moveGPU2CPU(arrDTI[i]);
+    }
+}
+
+/*
+===========
+| PRIVATE |
+===========
+*/
+
+state_t* initState(size_t nGPUs, size_t *idGPUs){
+
+    state_t *state = (state_t*)calloc(1,sizeof(state_t));
+    state->nGPUs = nGPUs;
+    state->idGPUs = idGPUs;
+
+    appData->state = state;
+    return state;
+}
+
+void freeState(state_t *state){
+
+    if(state){
+
+        if(state->idGPUs) 
+            free(state->idGPUs);
+        
+        //if(state->stateDeallocator) state->stateDeallocator();
+
+        free(state);
+    }
+}
+
+/*reconfData_t* initReconfigurationData(){
+
+    appReconfData = (reconfData_t*)calloc(1,sizeof(reconfData_t));
+    return appReconfData;
+}
+
+void freeReconfigurationData(reconfData_t *reconfData){
+
+    if(reconfData){
+
+        if(reconfData->idGPUs) free(reconfData->idGPUs);
+
+        free(reconfData);
+    }
+}*/
+
+DTI_t* initializeDTI(size_t type, size_t dataLocation, void* cpuData, void** gpuData, size_t N, size_t size, const char* name, GenericFunction cpu2gpu, GenericFunction gpu2cpu, DTIDesctiption_t *description){
+
+    // allocate memory
+    DTI_t *DTI = (DTI_t*)calloc(1, sizeof(DTI_t));
+
+    // intiialize data
+    DTI->type = type;
+    DTI->dataLocation = dataLocation; // CPU or GPU (unified memory in the future)
+
+    // store DTI data
+    DTI->cpuData = cpuData; // point to CPU data array
+    DTI->gpuData = gpuData;
+    DTI->N = N;
+    DTI->size = size;
+    DTI->name = name;
+
+    // if type is > 0, then manually defined functions are used for the data transmission
+    if(type > 0){
+        
+        DTI->moveCPU2GPU = cpu2gpu;
+        DTI->moveGPU2CPU = gpu2cpu;
+    }
+
+    // store description if type is 0, since the description is used for the data redistribution
+    if(type == 0){
+
+        DTI->description = description; // used in automatic 
     }
     
-    //ret = f(args);
-    return NULL;
+    return DTI;
 }
+
+void freeDTI(DTI_t *DTI, size_t nGPUs){
+    
+    // TODO
+    printf(" -- Not implemented yet!\n");
+}
+
+void freeDescription(DTIDesctiption_t *description, size_t nGPUs){
+
+    if(description){
+
+        if(description->n) 
+            free(description->n);
+        if(description->j) 
+            free(description->j);
+        if(description->off) 
+            free(description->off);
+        if(description->tn) 
+            free(description->tn);
+
+
+        if(description->nPartitionsPerGPU) 
+            free(description->nPartitionsPerGPU);
+        if(description->nElementsPerGPU) 
+            free(description->nElementsPerGPU);
+
+        for(size_t i = 0; i<nGPUs; i++){
+
+            if(description->nElementsPerPartition[i]) 
+                free(description->nElementsPerPartition[i]);
+            if(description->firstElementPerPartition[i]) 
+                free(description->firstElementPerPartition[i]);
+        }
+
+        if(description->nElementsPerPartition)
+            free(description->nElementsPerPartition);
+
+        if(description->firstElementPerPartition)
+            free(description->firstElementPerPartition);
+    }
+}
+
+/*void* runMockScheduler(void *arg){
+
+    // launch reconfigurations
+    sleep(2);
+    printf(" Notifying reconfiguration\n");
+    fflush(stdout);
+    notifyReconfiguration(4, NULL, NULL, NULL);
+    printf(" Reconfiguration notified\n");
+    fflush(stdout);
+}*/

@@ -10,8 +10,6 @@
 #include <cuda_runtime.h>
 
 #include "toy_app_malleable.hpp"
-#include "DDM.hpp"
-#include "DTM.hpp"
 #include "DITO_API.hpp"
 
 
@@ -56,7 +54,11 @@ void simulate(appStruct_t *appData, int T, size_t nGPUs){
     }
 }*/
 
-void DITTOsimulate(appStruct_t *appData, int T){
+void simulate(appStruct_t *appData){
+
+    int T = appData->T;
+
+    state_t *state = getState();
 
     for(int i = 0; i<T; i++){
 
@@ -77,7 +79,7 @@ void DITTOsimulate(appStruct_t *appData, int T){
             cudaSetDevice(state->idGPUs[j]);
 
             // run kernel
-            runKernel((int*)(arrDTI[0]->gpuData[j]), arrDTI[0]->infoCustom->nElementsPerGPU[j]);
+            runKernel((int*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->description->nElementsPerGPU[j]);
 
             // print
             printf(" -- %d iteration done in GPU %d\n", i, j);        
@@ -117,51 +119,43 @@ appStruct_t* moveAppStructToGPU(appStruct_t *appStruct, int N, int M){
     return appStruct;
 } 
 
-int main(int argc, char* argv[]){
+//int main(int argc, char* argv[]){
 
-    // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs
-    size_t nGPUs = 2;
-    size_t *idGPUs = (size_t*)calloc(nGPUs, sizeof(size_t)); // GPU identifiers
-    for(size_t i = 0; i<nGPUs; i++){
-        idGPUs[i] = i;
-    }
+void launch(int argc, void* argv[]){
 
+    printf(" In toy application\n");
+    fflush(stdout);
 
     // initialize DITTO environment
-    initDITTO(nGPUs, idGPUs);
-
-    // YOUR APP
+    // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
+    initDITTO(argv[argc-1]);
 
     // initialize data structure used in the application
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
-    appData->N = 5;
+    appData->N = *(int*)argv[0];
+    appData->T = *(int*)argv[1];
     appData->arr = (int*)calloc(appData->N, sizeof(int));
-
     for(size_t i = 0; i<appData->N; i++){
         
         appData->arr[i] = i;
     }
 
     // Initialize DTIs for automatically managing CPU-GPU communications
-    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(int), "appData", simple, ordered);
+    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(int), "appData", initializeDTIDescription(simple, ordered));
 
     // configure all DTIs for automatic data transference
-    configureDTI(appDataDTI, 2, 0, NULL, NULL);
+    reconfigureDTIs(getState()->nGPUs, 0); // number of GPUs, old number of GPUs
 
-    
     // send data to the GPU
-    printf(" -- Starting data transference\n");
-    fflush(stdout);
-    transferDataCPU2GPU(NULL, NULL, NULL);
-    printf(" -- Data transference done!\n");
-    fflush(stdout);
+    transferDataCPU2GPU();
 
     // program code (simulations)
     printArr(appData);
-    DITTOsimulate(appData, 2);
+    simulate(appData);
+
 
     // transfer data fron the GPUs to the CPU
-    transferDataGPU2CPU(NULL, NULL, NULL);
+    transferDataGPU2CPU();
 
     printArr(appData);
 }

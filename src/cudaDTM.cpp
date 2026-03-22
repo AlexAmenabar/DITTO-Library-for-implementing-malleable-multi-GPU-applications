@@ -9,31 +9,28 @@
 
 // TODO: transference only valid when there is only 1 partition per GPU
 
-int getNumberOfGPUs(){
-    
-    int nGPUs = 0;
-    cudaGetDeviceCount(&nGPUs);
-
-    return nGPUs;
-}
-
+// map using the idGPUs established by the scheduler
 void setGPUDevice(size_t i){
 
+    state_t *state = getState();
     cudaSetDevice(state->idGPUs[i]);
 }
 
 void cpyDataCPU2GPU(DTI_t *DTI){
 
     size_t i, j, nPartitionsGPU, nPerPartitionGPU, fPerPartitionGPU, nextIndex;
+    size_t nGPUs, *idGPUs;
     cudaError_t err;
+
     size_t size = DTI->size;
 
-    size_t nGPUs, *idGPUs;
+    // get application state
+    state_t *state = getState();
     nGPUs = state->nGPUs;
     idGPUs = state->idGPUs;
 
     // copy data from the CPU to the GPUs following the information in the DTI structure
-    infoCustomDTI_t *infoDTI = DTI->infoCustom;
+    DTIDesctiption_t *description = DTI->description;
 
     // accumulate partitions corresponding to the GPU contiguously
     void *cData = (void*)calloc(DTI->N, size);
@@ -42,14 +39,14 @@ void cpyDataCPU2GPU(DTI_t *DTI){
 
         // get the total number of elements to be transferred to the GPU
         //nElementsInGPU = infoDTI->nElementsPerGPU[i];
-        nPartitionsGPU = infoDTI->nPartitionsPerGPU[i];
+        nPartitionsGPU = description->nPartitionsPerGPU[i];
 
         // loop over partitions corresponding to the GPU and build the contiguous array
         for(j = 0; j<nPartitionsGPU; j++){
 
             // get partition data
-            nPerPartitionGPU = infoDTI->nElementsPerPartition[i][j];
-            fPerPartitionGPU = infoDTI->firstElementPerPartition[i][j];
+            nPerPartitionGPU = description->nElementsPerPartition[i][j];
+            fPerPartitionGPU = description->firstElementPerPartition[i][j];
 
             // copy the partition from the source to the destination
             void *src = (char*)(DTI->cpuData) + fPerPartitionGPU * size;
@@ -77,16 +74,16 @@ void cpyDataCPU2GPU(DTI_t *DTI){
         setGPUDevice(i);
 
         // allocate memory
-        err = cudaMalloc(&(DTI->gpuData[i]), infoDTI->nElementsPerGPU[i] * size); 
+        err = cudaMalloc(&(DTI->gpuData[i]), description->nElementsPerGPU[i] * size); 
         if (err != cudaSuccess) 
             printf("Allocation failed in %zu:  %s\n", i, cudaGetErrorString(err));
 
         // move data
-        err = cudaMemcpy(DTI->gpuData[i], (char*)cData + firstElement * size, infoDTI->nElementsPerGPU[i] * size, cudaMemcpyHostToDevice); 	
+        err = cudaMemcpy(DTI->gpuData[i], (char*)cData + firstElement * size, description->nElementsPerGPU[i] * size, cudaMemcpyHostToDevice); 	
         if (err != cudaSuccess) 
             printf("Memcpy failed in %zu:  %s\n", i, cudaGetErrorString(err));
 
-        firstElement += infoDTI->nElementsPerGPU[i];
+        firstElement += description->nElementsPerGPU[i];
     }
 
     // deallocate termporal intermediate structure
@@ -98,13 +95,14 @@ void cpyDataGPU2CPU(DTI_t *DTI){
     size_t i, j, nPartitionsGPU, nPerPartitionGPU, fPerPartitionGPU, nextIndex;
     cudaError_t err;
     size_t size = DTI->size;
+    state_t *state = getState();
 
     size_t nGPUs, *idGPUs;
     nGPUs = state->nGPUs;
     idGPUs = state->idGPUs;
 
     // copy data from the CPU to the GPUs following the information in the DTI structure
-    infoCustomDTI_t *infoDTI = DTI->infoCustom;
+    DTIDesctiption_t *description = DTI->description;
 
     // intermediate array to recive data from the GPUs contiguously and then redistribute
     void *cData = (void*)calloc(DTI->N, size);
@@ -117,11 +115,11 @@ void cpyDataGPU2CPU(DTI_t *DTI){
         setGPUDevice(i);
         
         // move data from the GPU to the CPU
-        err = cudaMemcpy((char*)cData + firstElement * size, DTI->gpuData[i], infoDTI->nElementsPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
+        err = cudaMemcpy((char*)cData + firstElement * size, DTI->gpuData[i], description->nElementsPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
         if (err != cudaSuccess) 
             printf("Memcpy GPU2CPU failed in %zu:  %s\n", i, cudaGetErrorString(err));
 
-        firstElement += infoDTI->nElementsPerGPU[i];
+        firstElement += description->nElementsPerGPU[i];
 
         // deallocate memory
         err = cudaFree(DTI->gpuData[i]); 
@@ -142,14 +140,14 @@ void cpyDataGPU2CPU(DTI_t *DTI){
     for(i = 0; i<nGPUs; i++){
         
         // get the total number of elements to be transferred to the GPU
-        nPartitionsGPU = infoDTI->nPartitionsPerGPU[i];
+        nPartitionsGPU = description->nPartitionsPerGPU[i];
 
         // loop over partitions corresponding to the GPU and build the contiguous array
         for(j = 0; j<nPartitionsGPU; j++){
 
             // get partition data
-            nPerPartitionGPU = infoDTI->nElementsPerPartition[i][j];
-            fPerPartitionGPU = infoDTI->firstElementPerPartition[i][j];
+            nPerPartitionGPU = description->nElementsPerPartition[i][j];
+            fPerPartitionGPU = description->firstElementPerPartition[i][j];
 
             // copy the partition from the source to the destination
             void *dst = (char*)(DTI->cpuData) + fPerPartitionGPU * size;
