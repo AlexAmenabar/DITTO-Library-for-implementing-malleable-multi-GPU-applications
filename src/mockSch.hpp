@@ -7,6 +7,7 @@
 typedef struct jobControl_t {
 
     // dedicated resources
+    size_t jobId;
     size_t nGPUs;
     size_t *idGPUs;
 

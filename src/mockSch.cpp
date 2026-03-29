@@ -85,11 +85,9 @@ void notifyReconfiguration(jobControl_t *jobControl, size_t nGPUs, size_t *idGPU
             free(jobControl->idGPUs);
  
         jobControl->idGPUs = (size_t*)calloc(nGPUs, sizeof(size_t));
-
         for(i = 0; i<nGPUs; i++)
             jobControl->idGPUs[i] = idGPUs[i];
         
-
         // new pending reconfiguration
         jobControl->pendingReconf = 1;
     }
@@ -161,6 +159,7 @@ int main(int argc, char* argv[]){
     ids[1] = 1;
     ids[2] = 2;
     ids[3] = 3;
+    schInfo.activeJobsControl[0].jobId = 0;
     initJobControl(&(schInfo.activeJobsControl[0]), 4, ids);
 
     // job arguments
@@ -204,18 +203,21 @@ int main(int argc, char* argv[]){
     int done = 0;
     while(done == 0){
         done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
+        sleep(1);
     }
 
 
     // [launch job 2]
-    size_t j1a = 50000; //1000000;
-    size_t j1b = 5000;
-    size_t j1c = 25000;
 
     ids = (size_t*)calloc(1, sizeof(size_t));
     ids[0] = 2;
+
+    schInfo.activeJobsControl[1].jobId = 1;
     initJobControl(&(schInfo.activeJobsControl[1]), 1, ids);
 
+    size_t j1a = 50000; //1000000;
+    size_t j1b = 5000;
+    size_t j1c = 25000;
     void* j1args[4];
     j1args[0] = &j1a;
     j1args[1] = &j1b;
