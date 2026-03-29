@@ -17,27 +17,58 @@
 
 /* [CONFIGURE & RECONFIGURE] */
 
-void redistributeDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
+void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
+
+    size_t i;
+    DTIDesctiption_t *description = DTI->description;
 
     // configure DTI only if DTI is automatic, else, functions are responsible of correctlu
     // deciding how to move data depending on the number of GPUs
     if(DTI->type == 0){
 
-        // if the new number of GPUs is different from the previous one, deallocate memory // TODO: this should be revised for other configuration methods,
-        // since deallocating description is not always correct. Sometimes description information will be neccessary
-        if(nGPUs != nOldGPUs){
+        ////////////////////////////////////////////////////
+        // deallocate information related to old configuration (nOldGPUs)
+        for(i = 0; i<nOldGPUs; i++){
 
-            freeDescription(DTI->description, nOldGPUs);
+            free(DTI->nPerPartition[i]);
+            free(DTI->offsetPerPartition[i]);
         }
+        if(DTI->nPerGPU)
+            free(DTI->nPerGPU);
+        if(DTI->nPerPartition)
+            free(DTI->nPerPartition);
+        if(DTI->offsetPerPartition)
+            free(DTI->offsetPerPartition);
 
+        // allocate for new configuration (nGPUs)
+        DTI->nPerGPU = (size_t*)calloc(nGPUs, sizeof(size_t));
+        DTI->nPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
+        DTI->offsetPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
+
+        for(i = 0; i<nGPUs; i++){
+
+            DTI->nPerPartition[i] = (size_t*)calloc(description->nPartitions, sizeof(size_t));
+            DTI->offsetPerPartition[i] = (size_t*)calloc(description->nPartitions, sizeof(size_t));
+        }
+        ////////////////////////////////////////////////////
+
+
+
+        ////////////////////////////////////////////////////
         // deallocate old GPU pointers and allocate new ones
         if(DTI->gpuData) 
             free(DTI->gpuData);
+
+        // allocate new pointers
         DTI->gpuData = (void**)calloc(nGPUs, sizeof(void*));
+        ////////////////////////////////////////////////////
 
 
-        // decide how to redistribute the data
+
+        ////////////////////////////////////////////////////
+        // configure data following the DTI description
         switch (DTI->description->tpttEnum){
+
             case all:
                 configureEntireTransmission(DTI, nGPUs);
                 break;
@@ -47,75 +78,47 @@ void redistributeDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
                 break;
 
             // TODO
-            /*case complex:
-                DTI->infoComplex = infoComplex;
-                configureComplexTransmission(DTI);
+            case complex:
+                configureComplexTransmission(DTI, nGPUs);
                 break;
-
-            case custom:
-                DTI->infoCustom = infoCustom;
-                configureCustomTransmission(DTI);
-                break;*/
         }
+        ////////////////////////////////////////////////////
     }
 }
 
 /* [AUTOMATIC REDISTRIBUTION CONFIGURATIONS] */
 
+// All GPUs receive the entire array of N elements
 void configureEntireTransmission(DTI_t *DTI, size_t nGPUs){
 
     size_t i;
     size_t N = DTI->N;
     DTIDesctiption_t *description = DTI->description;
 
-    // allcoate memory for new configuration
-    description->nElementsPerGPU = (size_t*)calloc(nGPUs, sizeof(size_t));
-    description->nPartitionsPerGPU = (size_t*)calloc(nGPUs, sizeof(size_t));
-
-    description->nElementsPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
-    description->nElementsPerPartition[0] = (size_t*)calloc(1, sizeof(size_t));
-
-    description->firstElementPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
-    description->firstElementPerPartition[0] = (size_t*)calloc(1, sizeof(size_t));
-
-    // configure
+    // configure information for all GPUs
     for(i = 0; i<nGPUs; i++){
         
-        description->nElementsPerGPU[i] = N;
-        description->nPartitionsPerGPU[i] = 1; // the entire data array is a the unique partition per GPU
-        description->nElementsPerPartition[i][0] = N; // there is only one partition 
-        description->firstElementPerPartition[i][0] = 0; // all start in 0 since the entire array is copied
+        DTI->nPerGPU[i] = N; // the entire array is copied to all GPUs
+        DTI->nPerPartition[i][0] = N; // the entire array is copied to all GPUs
+        DTI->offsetPerPartition[i][0] = 0; // all start in 0 since the entire array is copied
     }
 }
 
+// N elements are distributed accross nGPUs devices
 void configureSimpleTransmission(DTI_t *DTI, size_t nGPUs){
 
-    size_t i;
+    size_t i, n, tmpOffset;
     size_t N = DTI->N;
-    size_t n, tmpElement;
+    size_t nElements, rElements;
     DTIDesctiption_t *description = DTI->description;
 
-    // allcate memory for new configuration (1 partition per GPU)
-    description->nElementsPerGPU = (size_t*)calloc(nGPUs, sizeof(size_t));
-    description->nPartitionsPerGPU = (size_t*)calloc(nGPUs, sizeof(size_t));
-
-    description->nElementsPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
-    description->firstElementPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
-
-    for(i = 0; i<nGPUs; i++){
-
-        description->nElementsPerPartition[i] = (size_t*)calloc(1, sizeof(size_t));
-        description->firstElementPerPartition[i] = (size_t*)calloc(1, sizeof(size_t));
-    }
-    // compute number of elements per GPU
-    size_t nElements = N / nGPUs;
-    size_t rElements = N % nGPUs;
+    // compute the number of elements per GPU
+    nElements = N / nGPUs;
+    rElements = N % nGPUs;
 
     // configure the data distribution depending on the strategy for managing remaining elements
-
-    tmpElement = 0;
-
     // all remaining elements processed by the first GPU
+    tmpOffset = 0;
     for(i = 0; i<nGPUs; i++){
 
         if(description->rmEnum == first && i == 0)
@@ -130,11 +133,51 @@ void configureSimpleTransmission(DTI_t *DTI, size_t nGPUs){
         else
             n = nElements;
             
-        description->nElementsPerGPU[i] = n;
-        description->nPartitionsPerGPU[i] = 1; // the entire data array is a the unique partition per GPU
-        description->nElementsPerPartition[i][0] = n; // there is only one partition 
-        description->firstElementPerPartition[i][0] = tmpElement; // all start in 0 since the entire array is copied
+        // there is only one partition divided between all GPUs
+        DTI->nPerGPU[i] = n;
+        DTI->nPerPartition[i][0] = n; // there is only one partition 
+        DTI->offsetPerPartition[i][0] = tmpOffset; // all start in 0 since the entire array is copied
 
-        tmpElement += n;
+        tmpOffset += n;
+    }
+}
+
+void configureComplexTransmission(DTI_t *DTI, size_t nGPUs){
+
+    size_t i, n, tmpOffset;
+    size_t N = DTI->N;
+    size_t nElements, rElements, nElementsPerPartition, rElementsPerPartition, nPartitions;
+    DTIDesctiption_t *description = DTI->description;
+    nPartitions = description->nPartitions;
+
+    // compute the number of elements per GPU
+    nElements = N / nGPUs;
+    nElementsPerPartition = N / (nGPUs * nPartitions);
+    nElementsPerPartition = N % (nGPUs * nPartitions);
+    rElements = N % nGPUs;
+
+    // configure the data distribution depending on the strategy for managing remaining elements
+    // all remaining elements processed by the first GPU
+    tmpOffset = 0;
+    for(i = 0; i<nGPUs; i++){
+
+        if(description->rmEnum == first && i == 0)
+            n = nElements + rElements;  
+
+        else if(description->rmEnum == ordered && i < rElements)
+            n = nElements + 1;
+
+        else if(description->rmEnum == last && i == nGPUs-1)
+            n = nElements + rElements;
+        
+        else
+            n = nElements;
+            
+        // there is only one partition divided between all GPUs
+        DTI->nPerGPU[i] = n;
+        DTI->nPerPartition[i][0] = n; // there is only one partition 
+        DTI->offsetPerPartition[i][0] = tmpOffset; // all start in 0 since the entire array is copied
+
+        tmpOffset += n;
     }
 }

@@ -4,13 +4,19 @@
 
 typedef struct appStruct_t {
 
-    int *arr;
+    float *arr;
     int N;
     int T;
+    int K;
+    int cpuK;
 
+    int P;
+    int *phases;
 } appStruct_t;
 
 
-void runKernel(int* arr, int N);
+void runCPU(float *arr, int N, int K);
+void runKernel(float* arr, int N, int K);
 
-void launch(int argc, void* argv[]);
+void launch_iterative_app(int argc, void* argv[]);
+void launch_phases_app(int argc, void* argv[]);
