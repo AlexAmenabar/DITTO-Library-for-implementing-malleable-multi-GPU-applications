@@ -50,6 +50,11 @@ void freeDITTO(){
     // free appData, 
 }
 
+jobControl_t* getJobControl(){
+
+    return appData->jobControl;
+}
+
 
 /* [STATE] */
 

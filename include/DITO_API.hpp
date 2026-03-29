@@ -106,6 +106,7 @@ typedef struct public_APP_data_t {
 */
 void initDITTO(void *jobControl);
 void freeDITTO();
+jobControl_t* getJobControl();
 
 /* [STATE] */
 state_t* initState(size_t nGPUs, size_t *idGPUs); 

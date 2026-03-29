@@ -6,6 +6,7 @@
 #include "DTM.hpp"
 #include "DDM.hpp"
 #include "DITO_API.hpp"
+#include "mockSch.hpp"
 
 // TODO: transference only valid when there is only 1 partition per GPU
 
@@ -78,12 +79,12 @@ void cpyDataCPU2GPU(DTI_t *DTI){
         // allocate memory
         err = cudaMalloc(&(DTI->gpuData[i]), DTI->nPerGPU[i] * size); 
         if (err != cudaSuccess) 
-            printf("Allocation in GPU failed in %zu (%zu):  %s\n", appData->jobControl->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Allocation in GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
 
         // move data
         err = cudaMemcpy(DTI->gpuData[i], (char*)cData + firstElement * size, DTI->nPerGPU[i] * size, cudaMemcpyHostToDevice); 	
         if (err != cudaSuccess) 
-            printf("Memcpy CPU2GPU failed in %zu (%zu):  %s\n", appData->jobControl->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Memcpy CPU2GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
 
         firstElement += DTI->nPerGPU[i];
     }
@@ -119,14 +120,14 @@ void cpyDataGPU2CPU(DTI_t *DTI){
         // move data from the GPU to the CPU
         err = cudaMemcpy((char*)cData + firstElement * size, DTI->gpuData[i], DTI->nPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
         if (err != cudaSuccess) 
-            printf("Job%zu: Memcpy GPU2CPU failed in %zu (%zu):  %s\n", appData->jobControl->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Memcpy GPU2CPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
 
         firstElement += DTI->nPerGPU[i];
 
         // deallocate memory
         err = cudaFree(DTI->gpuData[i]); 
         if (err != cudaSuccess) 
-            printf("Job%zu: Deallocation failed in %zu (%zu):  %s\n", appData->jobControl->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Deallocation failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
 
     }
 
