@@ -75,6 +75,7 @@ void cpyDataCPU2GPU(DTI_t *DTI){
 
         // set device
         setGPUDevice(i);
+	cudaDeviceSynchronize();
 
         // allocate memory
         err = cudaMalloc(&(DTI->gpuData[i]), DTI->nPerGPU[i] * size); 
@@ -116,7 +117,8 @@ void cpyDataGPU2CPU(DTI_t *DTI){
 
         // set device
         setGPUDevice(i);
-        
+//        cudaDeviceSynchronize();
+
         // move data from the GPU to the CPU
         err = cudaMemcpy((char*)cData + firstElement * size, DTI->gpuData[i], DTI->nPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
         if (err != cudaSuccess) 
@@ -167,4 +169,14 @@ void cpyDataGPU2CPU(DTI_t *DTI){
         }
     }
     printf("\n");
+}
+
+void resetGPUs(){
+    
+    // reinit all GPUs
+    for(size_t i = 0; i<getState()->nGPUs; i++){
+
+        cudaSetDevice(getState()->idGPUs[i]);
+        cudaDeviceReset();
+    }
 }

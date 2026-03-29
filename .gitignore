@@ -44,6 +44,9 @@
 *.toml
 *.txt
 *.sbatch
+*.csv
+*.png
+*.py
 
 # Debug files
 *.dSYM/

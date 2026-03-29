@@ -15,11 +15,12 @@
 /* [Global variables] */
 
 // App Data
-public_APP_data_t *appData = NULL;
+thread_local public_APP_data_t *appData = NULL;
 
 // DTIs
-DTI_t** arrDTI = NULL;
-size_t nDTI, maxDTI;
+thread_local DTI_t** arrDTI = NULL;
+thread_local size_t nDTI; 
+thread_local size_t maxDTI;
 
 
 /* [INITIALIZATION] */
@@ -38,6 +39,8 @@ void initDITTO(void *jobControl){
 
 
     // initialize array of DTIs
+    printf("nDTI = %zu\n", nDTI);
+    fflush(stdout);
     nDTI = 0;
     maxDTI = 10;
     arrDTI = (DTI_t**)calloc(maxDTI, sizeof(DTI_t*));
@@ -311,6 +314,7 @@ void transferDataGPU2CPU(){
             arrDTI[i]->moveGPU2CPU(arrDTI[i]);
         }
     }
+    //resetGPUs();
 }
 
 

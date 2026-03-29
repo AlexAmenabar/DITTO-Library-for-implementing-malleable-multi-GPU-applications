@@ -164,8 +164,8 @@ int main(int argc, char* argv[]){
 
     // job arguments
     size_t j0a = 500000;
-    size_t j0b = 50000;
-    size_t j0c = 10000;
+    size_t j0b = 10000;
+    size_t j0c = 50000;
     void* j0args[4];
     j0args[0] = &j0a;
     j0args[1] = &j0b;
@@ -186,7 +186,7 @@ int main(int argc, char* argv[]){
 
     // Reconfigure job 1 from 4 GPUs to 2
 
-    sleep(5);
+    sleep(25);
 
     free(ids);
     ids = (size_t*)calloc(2, sizeof(size_t));
@@ -215,9 +215,9 @@ int main(int argc, char* argv[]){
     schInfo.activeJobsControl[1].jobId = 1;
     initJobControl(&(schInfo.activeJobsControl[1]), 1, ids);
 
-    size_t j1a = 50000; //1000000;
-    size_t j1b = 5000;
-    size_t j1c = 25000;
+    size_t j1a = 75000; //1000000;
+    size_t j1b = 100000;
+    size_t j1c = 50000;
     void* j1args[4];
     j1args[0] = &j1a;
     j1args[1] = &j1b;
@@ -236,10 +236,8 @@ int main(int argc, char* argv[]){
     fflush(stdout);
 
 
-    sleep(100);
-
     // [launch job 3]
-    /*size_t j2a = 500000; //1000000;
+    size_t j2a = 500000; //1000000;
     size_t j2b = 5000;
     size_t j2c = 15000;
 
@@ -279,5 +277,7 @@ int main(int argc, char* argv[]){
 
     pthread_join(thr0, NULL);
     pthread_join(thr1, NULL);
-    //pthread_join(thr2, NULL);
+    pthread_join(thr2, NULL);
+
+    sleep(5);
 }
