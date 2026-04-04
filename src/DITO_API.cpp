@@ -4,6 +4,7 @@
 #include <stdio.h>      
 #include <stdlib.h>     
 #include <pthread.h>
+#include <time.h>
 
 #include "DITO_API.hpp"
 #include "priv_DITTO_API.hpp"
@@ -63,17 +64,23 @@ jobControl_t* getJobControl(){
 
 state_t* initState(size_t nGPUs, size_t *idGPUs){
 
+    // allocat memory for state variable
     state_t *state = (state_t*)calloc(1,sizeof(state_t));
+
+    // store the number of GPUs
     state->nGPUs = nGPUs;
 
+    // deallocate old pointer of GPU identifiers
     if(state->idGPUs) 
         free(state->idGPUs);
     
+    // allocate array for new GPU identifiers
     state->idGPUs = (size_t*)malloc(nGPUs * sizeof(size_t));
     for(size_t i = 0; i<nGPUs; i++)
         state->idGPUs[i] = idGPUs[i];
 
-    // store in the global variable
+
+    // store state in the global variable and return
     appData->state = state; 
     return state;
 }
@@ -85,8 +92,6 @@ void freeState(state_t *state){
         if(state->idGPUs) 
             free(state->idGPUs);
         
-        //if(state->stateDeallocator) state->stateDeallocator();
-
         free(state);
     }
 }
@@ -136,141 +141,61 @@ size_t* getGPUIds(){
     return getState()->idGPUs;
 }
 
-
-/* [NOTIFICATIONS] */
-
-// application checks whether there is a pending reconfiguration
-int checIfkReconfiguration(){
-
-    int localPendingReconf;
-
-    // check whether there is any pending reconfiguration
-    pthread_mutex_lock(&(appData->jobControl->lockPendingReconf));
-    localPendingReconf = appData->jobControl->pendingReconf;
-    pthread_mutex_unlock(&appData->jobControl->lockPendingReconf);
-
-    return localPendingReconf;
-}
-
-// application notifies reconfiguration finished
-void notifyReconfigurationDone(){
-
-    pthread_mutex_lock(&(appData->jobControl->lockPendingReconf));
-    // reconfiguration done
-    appData->jobControl->pendingReconf = 0;
-    pthread_mutex_unlock(&(appData->jobControl->lockPendingReconf));
-
-    pthread_mutex_lock(&(appData->jobControl->lockSigGPUs));
-    // no GPUs required
-    appData->jobControl->sigGPUs = 0; 
-    pthread_mutex_unlock(&(appData->jobControl->lockSigGPUs));
-
-    pthread_mutex_lock(&(appData->jobControl->lockReqGPUs));
-    // if GPUs were requested, remove request
-    appData->jobControl->reqGPUs = 0; 
-    pthread_mutex_unlock(&(appData->jobControl->lockReqGPUs));
-}
-
-void notifySigGPUs(){
-    
-    state_t *state = getState();
-
-    // move data to the CPU
-    transferDataGPU2CPU(); // move data from the GPUs to the CPU
-    
-    // TODO: since this updates the state, it should be used calling the function
-    // remove GPU information in the state
-    state->nGPUs = 0;
-    if(state->idGPUs)
-        free(state->idGPUs);
-    state->idGPUs = NULL;
-
-    pthread_mutex_lock(&(appData->jobControl->lockSigGPUs));
-    // no GPUs required
-    appData->jobControl->sigGPUs = 1; 
-    pthread_mutex_unlock(&(appData->jobControl->lockSigGPUs));
-}
-
-void notifyReqGPUs(){
-    
-    pthread_mutex_lock(&(appData->jobControl->lockReqGPUs));
-    // no GPUs required
-    appData->jobControl->reqGPUs = 1; 
-    pthread_mutex_unlock(&(appData->jobControl->lockReqGPUs));
-
-    // wait the answer to the request
-    pthread_mutex_lock(&(appData->jobControl->lockReqGPUs));
-    while (getState()->nGPUs == 0) {
-        pthread_cond_wait(&(appData->jobControl->condReqGPUs), &(appData->jobControl->lockReqGPUs));
-    }
-
-    appData->jobControl->reqGPUs = 0; 
-    pthread_mutex_unlock(&(appData->jobControl->lockReqGPUs));
-}
-
-
-/**
-* Function to perform the application reconfiguration
-*
-* The function perform the complete reconfiguration process by first reconfiguring the data by moving from the GPU to the CPU,
-* deciding how to redistribute it and moving again to the GPU. Then, kernels are reconfigured and finally the scheduler is informed
-* that the reconfiguration is done.
-* 
-* 
-*/
 void reconfigure(){
 
-    printf(" -- Reconfiguring application\n");
-    fflush(stdout);
+    double tGPU2CPU = 0.0, tCPU2GPU = 0.0, tRecfg = 0.0;
+    struct timespec startGPU2CPU, startCPU2GPU, startRecfg, endGPU2CPU, endCPU2GPU, endRecfg;
+
 
     size_t nOldGPUs, nGPUs;
     state_t *state = getState();
-    jobControl_t *jobControl = appData->jobControl;
+    jobControl_t *jobControl = getJobControl();
 
     // number of GPUs before reconfiguration
     nOldGPUs = state->nGPUs;
 
+    clock_gettime(CLOCK_MONOTONIC, &startGPU2CPU);
     if(nOldGPUs>0){
 
         // move data from the GPUs to the CPU using the DTIs
         transferDataGPU2CPU(); // move data from the GPUs to the CPU
     }
-    printf(" -- Data moved from the GPU to the CPU\n");
-    fflush(stdout);
-
+    clock_gettime(CLOCK_MONOTONIC, &endGPU2CPU);
+    tGPU2CPU = (endGPU2CPU.tv_sec - startGPU2CPU.tv_sec) + (endGPU2CPU.tv_nsec - startGPU2CPU.tv_nsec) / 1e9;
 
     // update state using the information provided by the jobController
+    clock_gettime(CLOCK_MONOTONIC, &startRecfg);
     updateState(state, jobControl);
-    printf(" -- State updated\n");
-    fflush(stdout);
+    clock_gettime(CLOCK_MONOTONIC, &endRecfg);
+    tRecfg += (endRecfg.tv_sec - startRecfg.tv_sec) + (endRecfg.tv_nsec - startRecfg.tv_nsec) / 1e9;
+
 
     // number of GPUs after reconfiguration
     nGPUs = state->nGPUs;
-
+    
     // reconfigure DTIs and resend data to the GPUs, if necessary
     if(nGPUs>0){
 
         // configure DTIs
+        clock_gettime(CLOCK_MONOTONIC, &startRecfg);
         configureDTIs(nGPUs, nOldGPUs);
-        printf(" -- DTIs configured\n");
-        fflush(stdout);
+        clock_gettime(CLOCK_MONOTONIC, &endRecfg);
+        tRecfg += (endRecfg.tv_sec - startRecfg.tv_sec) + (endRecfg.tv_nsec - startRecfg.tv_nsec) / 1e9;
 
         // move data again from the CPU to the GPUs
+        clock_gettime(CLOCK_MONOTONIC, &startCPU2GPU);
         transferDataCPU2GPU();
-        printf(" -- Data moved from the CPU to the GPU\n");
-        fflush(stdout);
-        
+        clock_gettime(CLOCK_MONOTONIC, &endCPU2GPU);
+        tCPU2GPU += (endCPU2GPU.tv_sec - startCPU2GPU.tv_sec) + (endCPU2GPU.tv_nsec - startCPU2GPU.tv_nsec) / 1e9;
+
         // reconfigure the kernels
         reconfigureKernels(NULL, NULL);
-        printf(" -- Kernels reconfigured\n");
-        fflush(stdout);
     }
 
+    printf("%zu %zu %lf %lf %lf", nOldGPUs, nGPUs, tGPU2CPU, tRecfg, tCPU2GPU);
 
     // notify that the reconfiguration has been done
-    notifyReconfigurationDone();
-
-    printf(" -- Reconfiguration done!\n");
+    notifyReconfigurationDone(getJobControl());
 }
 
 // TODO
@@ -314,7 +239,6 @@ void transferDataGPU2CPU(){
             arrDTI[i]->moveGPU2CPU(arrDTI[i]);
         }
     }
-    //resetGPUs();
 }
 
 

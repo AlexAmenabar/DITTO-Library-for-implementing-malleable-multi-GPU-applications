@@ -14,8 +14,8 @@
 void setGPUDevice(size_t i){
 
     state_t *state = getState();
-    printf(" Setting dev %zu (%zu)\n", i, state->idGPUs[i]);
-    fflush(stdout);
+    //printf(" Setting dev %zu (%zu)\n", i, state->idGPUs[i]);
+    //fflush(stdout);
     cudaSetDevice(state->idGPUs[i]);
 }
 
@@ -60,14 +60,6 @@ void cpyDataCPU2GPU(DTI_t *DTI){
             }
         }
     }
-
-    /*printf(" Printing cData = ");
-    int* intCData = (int*)cData;
-    for(i = 0; i<DTI->N; i++){
-
-        printf("%d ", intCData[i]);
-    }
-    printf("\n");*/
 
     // allocate memory and move data to the GPU
     size_t firstElement = 0;
@@ -133,16 +125,8 @@ void cpyDataGPU2CPU(DTI_t *DTI){
 
     }
 
-    /*printf(" Printing cData = ");
-    int* intCData = (int*)cData;
-    for(i = 0; i<DTI->N; i++){
-
-        printf("%d ", intCData[i]);
-    }*/
 
     nPartitionsGPU = description->nPartitions;
-
-
     nextIndex = 0;
     for(i = 0; i<nGPUs; i++){
         
@@ -168,7 +152,7 @@ void cpyDataGPU2CPU(DTI_t *DTI){
             }
         }
     }
-    printf("\n");
+    //printf("\n");
 }
 
 void resetGPUs(){

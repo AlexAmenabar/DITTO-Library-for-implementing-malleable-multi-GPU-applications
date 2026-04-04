@@ -53,6 +53,7 @@
 *.su
 *.idb
 *.pdb
+*.pdf
 
 # Kernel Module Compile Results
 *.mod*

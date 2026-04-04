@@ -93,52 +93,64 @@ typedef struct public_APP_data_t {
 
 } public_APP_Data_t;
 
+
+
+// DITTO management data, private for each thread
+extern thread_local public_APP_data_t *appData; // app data related to DITTO (state and jobControl)
+extern thread_local DTI_t** arrDTI; // array of DTIs
+extern thread_local size_t nDTI; // number of DTIs
+extern thread_local size_t maxDTI; // maximum number of DTIs
+
+
 /* [INITIALIZATION] */
 
-/**
-*
-* Initialize environment for communicating the scheduler and the application 
-* 
-* The function initializes the necessary global variables for communicating both the scheduler and the application,
-* which uses a lock variable to avoid race conditions when writing global variables. 
-*
-* @param[in] jobControl Structure that contains data about 
-*/
+/// initialize DITTO environment: state, array of DTIs...
 void initDITTO(void *jobControl);
+
+/// free DITTO environment
 void freeDITTO();
+
+/// get Job control from the appData variable // TODO: I don't think this should be accesible
 jobControl_t* getJobControl();
 
 /* [STATE] */
+/// initialize app state: number of GPUs and GPU identifiers
 state_t* initState(size_t nGPUs, size_t *idGPUs); 
+
+/// deallocate state memory
 void freeState(state_t *state);
+
+/// get state variable from the DITTO application data
 state_t* getState();
-void updateState();
+
+/// update the application state: the number of GPUs and the GPU identifiers using the information in the jobControl structure
+state_t* updateState(state_t *state, jobControl_t *jobControl);
+
+/// store the application state
 state_t* storeState(state_t *state);
+
+/// get the number of GPUs available for the job
 size_t getNumberOfGPUs();
+
+/// get the GPU identifiers available for the job
 size_t* getGPUIds();
-
-/* [NOTIFICATIONS] */
-
-// application checks whether there is any pending reconfiguration
-int checIfkReconfiguration();
-
-// application notifies that reconfiguration finished
-void notifyReconfigurationDone();
-void notifySigGPUs();
-void notifyReqGPUs();
 
 
 /* [RECONFIGURATIONS] */
 
-// reconfigure application: state, data distribution and kernels
+/// Reconfigure application: move data from the GPU to the CPU, update state, reconfigure DTIs for the new available resources, and move data again to the GPU. If necessary, reconfigure kernels too
 void reconfigure();
 
-// reconfigure DTIs to the new number of GPUs
+/// Reconfigure DTIs for the new resources available
 void reconfigureDTIs(size_t nGPUs, size_t nOldGPUs);
 
-// reconfigure kernels to the new number of GPUs
+/// Reconfigure kernels to the new number of GPUs
 void* reconfigureKernels(GenericFunction f, void* params);
+
+/// Move DTIs data from the CPU to the GPUs
 void transferDataCPU2GPU();
+
+/// Move DTIs data from the GPUs to the CPU
 void transferDataGPU2CPU();
 
 

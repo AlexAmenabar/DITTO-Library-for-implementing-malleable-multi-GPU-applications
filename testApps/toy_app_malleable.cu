@@ -14,10 +14,16 @@ __global__ void simulateKernel(float* arr, int N, int K){
     if(threadId < N){
     
         float val = arr[threadId];
+        float v0 = val, v1 = val, v2 = val, v3 = val;
+
         for (int k = 0; k < K; k++) {
-            val = val * 1.000001f + 0.000001f; //(val * 1.01) * 0.999;// * 0.99;// / 1.5;//1.000001f + 0.000001f;
+            v0 = v0 * 1.000001f + 0.000001f;
+            v1 = v1 * 1.000001f + 0.000001f;
+            v2 = v2 * 1.000001f + 0.000001f;
+            v3 = v3 * 1.000001f + 0.000001f;
         }
-        val = val * 0.5;
+
+        val = (v0 + v1 + v2 + v3) * 0.125f;
 
         arr[threadId] = val;
     }
@@ -26,7 +32,7 @@ __global__ void simulateKernel(float* arr, int N, int K){
 
 void runKernel(float* arr, int N, int K){
 
-    int threads = 256;
+    int threads = 512;
     int blocks = (N + threads - 1) / threads;
 
     simulateKernel<<<blocks, threads>>>(arr, N, K);

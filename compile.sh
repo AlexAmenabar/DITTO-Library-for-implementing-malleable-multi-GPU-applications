@@ -1,1 +1,1 @@
-bnd run --devel nvcc -g -Iinclude testApps/toy_app_malleable.cpp src/DITO_API.cpp src/DDM.cpp src/cudaDTM.cpp src/mockSch.cpp testApps/toy_app_malleable.cu -Xcompiler -fopenmp -o bin/toy_app -lpthread 
+bnd run --devel nvcc -g -Iinclude -Isrc testApps/toy_app_malleable.cpp src/DITO_API.cpp src/DDM.cpp src/cudaDTM.cpp src/mockSch.cpp testApps/toy_app_malleable.cu -Xcompiler -fopenmp -o bin/toy_app -lpthread  -lnvidia-ml

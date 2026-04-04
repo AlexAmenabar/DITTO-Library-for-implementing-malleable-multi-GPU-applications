@@ -41,6 +41,7 @@ void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
             free(DTI->offsetPerPartition);
 
         // allocate for new configuration (nGPUs)
+    
         DTI->nPerGPU = (size_t*)calloc(nGPUs, sizeof(size_t));
         DTI->nPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
         DTI->offsetPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));

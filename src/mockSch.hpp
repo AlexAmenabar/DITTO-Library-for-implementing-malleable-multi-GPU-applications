@@ -28,6 +28,12 @@ typedef struct jobControl_t {
     // monitoring
     double *gpuUsage;
 
+    // launch
+    size_t reqMinGPUs; // minimum number of required GPUs
+    size_t reqMaxGPUs; // maximum number of required GPUs
+
+    size_t t_launch; // time step in which it has been launched
+
 } jobControl_t;
 
 
@@ -37,8 +43,6 @@ typedef struct job_t {
     int argc;
     void** argv;
     void (*launchFunc)(int, void* []);
-
-    size_t reqGPUs;
 
 } job_t;
 
@@ -62,7 +66,49 @@ typedef struct schInfo_t {
 
 } schInfo_t;
 
+
+/// Init job control for communicating the scheduler and the job
+void initJobControl(jobControl_t* jControl, size_t nGPUs, size_t* idGPUs);
+
+/// Launch a job
+void* runJob(void *jobLauncherVoid);
+
+
+// [NOTIFICATIONS]
+
+// [Scheduler scope]
+/// Scheduler checks whether the job finished its execution
+int checkJobFinished(jobControl_t *jControl);
+
+/// Scheduler notifies a reconfiguration to a job
+void notifyReconfiguration(jobControl_t *jobControl, size_t nGPUs, size_t *idGPUs);
+
+/// Scheduler checks whether the job indicated that it does not need GPUs
+int checkSignalNoGPUs(jobControl_t *jobControl);
+
+/// Scheduler check wheter the job indicated that it need GPUs
+int checkSignalReqGPUs(jobControl_t *jobControl);
+
+/// Scheduler checks if the job finished its reconfiguration
+int checkReconfigurationDone(jobControl_t *jobControl);
+
+
+// [Job scope]
+
+/// Job checks if there are pending reconfigurations
+int checkIfReconfiguration(jobControl_t *jobControl);
+
+/// Notify to the scheduler that the job finished
 void jobFinished(jobControl_t* jControl);
+
+/// Job notifies that it finished the reconfiguration
+void notifyReconfigurationDone(jobControl_t *jobControl);
+
+/// Notify to the scheduler that no GPUs are required by the job
+void notifySigGPUs(jobControl_t *jobControl);
+
+/// Notify to the scheduler that the job require GPU(s)
+void notifyReqGPUs(jobControl_t *jobControl);
 
 
 #endif
