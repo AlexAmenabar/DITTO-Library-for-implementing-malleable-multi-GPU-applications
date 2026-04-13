@@ -25,6 +25,7 @@ thread_local size_t maxDTI;
 
 
 /* [INITIALIZATION] */
+
 void initDITTO(void *jobControl){
 
     jobControl_t *jobCtrl = (jobControl_t*)jobControl;
@@ -36,7 +37,7 @@ void initDITTO(void *jobControl){
     appData->jobControl = jobCtrl; // communication with the scheduler
 
     // initialize application state // TODO: probably it should be a function
-    appData->state = initState(jobCtrl->nGPUs, jobCtrl->idGPUs);
+    appData->state = initState(jobCtrl->jobResources);
 
 
     // initialize array of DTIs
@@ -62,23 +63,50 @@ jobControl_t* getJobControl(){
 
 /* [STATE] */
 
-state_t* initState(size_t nGPUs, size_t *idGPUs){
+
+void freeJobResources(jobResources_t *jobResources){
+        
+    if(jobResources){
+
+        if(jobResources->idGPUs){
+
+            free(jobResources->idGPUs);
+        }
+
+        free(jobResources);
+    }
+}
+
+void cpyJobResourcesToState(state_t *state, jobResources_t *rmsJobResources){
+
+    jobResources_t *appJobResources = state->jobResources;
+
+    // free old resources
+    freeJobResources(state->jobResources);
+
+    printf(" -- RMS GPUS = %zu\n", rmsJobResources->nGPUs);
+    fflush(stdout);
+
+    // allocate and copy job resources
+    jobResources_t *jobResources = (jobResources_t*)calloc(1,sizeof(jobResources_t));
+    state->jobResources = jobResources;
+
+    // store the number of GPUs
+    jobResources->nGPUs = rmsJobResources->nGPUs;
+    
+    // allocate array for GPU identifiers
+    jobResources->idGPUs = (size_t*)malloc(jobResources->nGPUs * sizeof(size_t));
+    for(size_t i = 0; i<jobResources->nGPUs; i++)
+        jobResources->idGPUs[i] = rmsJobResources->idGPUs[i];
+}
+
+state_t* initState(jobResources_t *rmsJobResources){
 
     // allocat memory for state variable
     state_t *state = (state_t*)calloc(1,sizeof(state_t));
 
-    // store the number of GPUs
-    state->nGPUs = nGPUs;
-
-    // deallocate old pointer of GPU identifiers
-    if(state->idGPUs) 
-        free(state->idGPUs);
-    
-    // allocate array for new GPU identifiers
-    state->idGPUs = (size_t*)malloc(nGPUs * sizeof(size_t));
-    for(size_t i = 0; i<nGPUs; i++)
-        state->idGPUs[i] = idGPUs[i];
-
+    // copy job resources from the RMS structure to the application structure
+    cpyJobResourcesToState(state, rmsJobResources);
 
     // store state in the global variable and return
     appData->state = state; 
@@ -89,9 +117,7 @@ void freeState(state_t *state){
 
     if(state){
 
-        if(state->idGPUs) 
-            free(state->idGPUs);
-        
+        freeJobResources(state->jobResources);
         free(state);
     }
 }
@@ -103,22 +129,8 @@ state_t* getState(){
 
 state_t* updateState(state_t *state, jobControl_t *jobControl){
     
-    size_t i, nGPUs, *idGPUs;
-
-    nGPUs = jobControl->nGPUs;
-    idGPUs = jobControl->idGPUs;
-
-    // update state (copy number of GPUs and GPU ids)
-    state->nGPUs = nGPUs;
-
-    // deallocate old GPU ids
-    if(state->idGPUs) 
-        free(state->idGPUs);
-
-    // store new GPU ids
-    state->idGPUs = (size_t*)malloc(nGPUs * sizeof(size_t));
-    for(i = 0; i<nGPUs; i++)
-        state->idGPUs[i] = idGPUs[i];
+    // update job resources
+    cpyJobResourcesToState(state, jobControl->jobResources);
 
     // return the new state
     return state;
@@ -133,12 +145,12 @@ state_t* storeState(state_t *state){
 
 size_t getNumberOfGPUs(){
 
-    return getState()->nGPUs;
+    return getState()->jobResources->nGPUs;
 }
 
 size_t* getGPUIds(){
 
-    return getState()->idGPUs;
+    return getState()->jobResources->idGPUs;
 }
 
 void reconfigure(){
@@ -146,13 +158,13 @@ void reconfigure(){
     double tGPU2CPU = 0.0, tCPU2GPU = 0.0, tRecfg = 0.0;
     struct timespec startGPU2CPU, startCPU2GPU, startRecfg, endGPU2CPU, endCPU2GPU, endRecfg;
 
-
-    size_t nOldGPUs, nGPUs;
     state_t *state = getState();
     jobControl_t *jobControl = getJobControl();
 
+    size_t nGPUs, nOldGPUs;
+
     // number of GPUs before reconfiguration
-    nOldGPUs = state->nGPUs;
+    nOldGPUs = getNumberOfGPUs();
 
     clock_gettime(CLOCK_MONOTONIC, &startGPU2CPU);
     if(nOldGPUs>0){
@@ -171,7 +183,7 @@ void reconfigure(){
 
 
     // number of GPUs after reconfiguration
-    nGPUs = state->nGPUs;
+    nGPUs = getNumberOfGPUs();
     
     // reconfigure DTIs and resend data to the GPUs, if necessary
     if(nGPUs>0){
@@ -406,7 +418,7 @@ void printDTI(DTI_t *DTI){
 
     size_t i, j;
     state_t *state = getState();
-    size_t nGPUs = state->nGPUs;
+    size_t nGPUs = getNumberOfGPUs();
     DTIDesctiption_t *description = DTI->description;
 
     for(i = 0; i<nGPUs; i++){

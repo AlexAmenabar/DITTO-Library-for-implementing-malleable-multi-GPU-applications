@@ -8,15 +8,17 @@
 #include "DITO_API.hpp"
 #include "mockSch.hpp"
 
+// TODO: this module should be revised since it calls functions that it shouldn't
+
 // TODO: transference only valid when there is only 1 partition per GPU
 
-// map using the idGPUs established by the scheduler
+// map using the idGPUs established by the RMS
 void setGPUDevice(size_t i){
 
     state_t *state = getState();
     //printf(" Setting dev %zu (%zu)\n", i, state->idGPUs[i]);
     //fflush(stdout);
-    cudaSetDevice(state->idGPUs[i]);
+    cudaSetDevice(getGPUIds()[i]);
 }
 
 void cpyDataCPU2GPU(DTI_t *DTI){
@@ -29,8 +31,8 @@ void cpyDataCPU2GPU(DTI_t *DTI){
 
     // get application state
     state_t *state = getState();
-    nGPUs = state->nGPUs;
-    idGPUs = state->idGPUs;
+    nGPUs = getNumberOfGPUs();
+    idGPUs = getGPUIds();
 
     // copy data from the CPU to the GPUs following the information in the DTI structure
     DTIDesctiption_t *description = DTI->description;
@@ -72,12 +74,12 @@ void cpyDataCPU2GPU(DTI_t *DTI){
         // allocate memory
         err = cudaMalloc(&(DTI->gpuData[i]), DTI->nPerGPU[i] * size); 
         if (err != cudaSuccess) 
-            printf("Job%zu: Allocation in GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Allocation in GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getGPUIds()[i], cudaGetErrorString(err));
 
         // move data
         err = cudaMemcpy(DTI->gpuData[i], (char*)cData + firstElement * size, DTI->nPerGPU[i] * size, cudaMemcpyHostToDevice); 	
         if (err != cudaSuccess) 
-            printf("Job%zu: Memcpy CPU2GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Memcpy CPU2GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getGPUIds()[i], cudaGetErrorString(err));
 
         firstElement += DTI->nPerGPU[i];
     }
@@ -94,8 +96,8 @@ void cpyDataGPU2CPU(DTI_t *DTI){
     state_t *state = getState();
 
     size_t nGPUs, *idGPUs;
-    nGPUs = state->nGPUs;
-    idGPUs = state->idGPUs;
+    nGPUs = getNumberOfGPUs();
+    idGPUs = getGPUIds();
 
     // copy data from the CPU to the GPUs following the information in the DTI structure
     DTIDesctiption_t *description = DTI->description;
@@ -114,14 +116,14 @@ void cpyDataGPU2CPU(DTI_t *DTI){
         // move data from the GPU to the CPU
         err = cudaMemcpy((char*)cData + firstElement * size, DTI->gpuData[i], DTI->nPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
         if (err != cudaSuccess) 
-            printf("Job%zu: Memcpy GPU2CPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Memcpy GPU2CPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getGPUIds()[i], cudaGetErrorString(err));
 
         firstElement += DTI->nPerGPU[i];
 
         // deallocate memory
         err = cudaFree(DTI->gpuData[i]); 
         if (err != cudaSuccess) 
-            printf("Job%zu: Deallocation failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getState()->idGPUs[i], cudaGetErrorString(err));
+            printf("Job%zu: Deallocation failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getGPUIds()[i], cudaGetErrorString(err));
 
     }
 
@@ -158,9 +160,9 @@ void cpyDataGPU2CPU(DTI_t *DTI){
 void resetGPUs(){
     
     // reinit all GPUs
-    for(size_t i = 0; i<getState()->nGPUs; i++){
+    for(size_t i = 0; i<getNumberOfGPUs(); i++){
 
-        cudaSetDevice(getState()->idGPUs[i]);
+        cudaSetDevice(getGPUIds()[i]);
         cudaDeviceReset();
     }
 }

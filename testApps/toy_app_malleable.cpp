@@ -94,7 +94,7 @@ void simulatePhases(appStruct_t *data){
             else{
 
                 // since this phase requires GPUs, check if it has, and, if not, request
-                if(getState()->nGPUs == 0){
+                if(getNumberOfGPUs() == 0){
                     
                     if(data->malleable == 1){
                         
@@ -116,8 +116,8 @@ void simulatePhases(appStruct_t *data){
                 size_t localmaxDTI = maxDTI;
                 
                 // firstprivates should be removed in the future
-                #pragma omp parallel for num_threads (state->nGPUs)
-                for(int j = 0; j<(int)(state->nGPUs); j++){
+                #pragma omp parallel for num_threads (getNumberOfGPUs())
+                for(int j = 0; j<(int)(getNumberOfGPUs()); j++){
 
                     appData = localData;
                     arrDTI = localArrDTI;
@@ -125,7 +125,7 @@ void simulatePhases(appStruct_t *data){
                     maxDTI = localmaxDTI;
 
                     // set device
-                    cudaSetDevice(state->idGPUs[j]);
+                    cudaSetDevice(getGPUIds()[j]);
 
                     // run kernel
                     runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
@@ -166,8 +166,8 @@ void simulateIterative(appStruct_t *data){
         size_t localmaxDTI = maxDTI;
         
         // firstprivates should be removed in the future
-        #pragma omp parallel for num_threads (state->nGPUs)
-        for(int j = 0; j<(int)(state->nGPUs); j++){
+        #pragma omp parallel for num_threads (getNumberOfGPUs())
+        for(int j = 0; j<(int)(getNumberOfGPUs()); j++){
 
             appData = localData;
             arrDTI = localArrDTI;
@@ -175,7 +175,7 @@ void simulateIterative(appStruct_t *data){
             maxDTI = localmaxDTI;
 
             // set device
-            cudaSetDevice(state->idGPUs[j]);
+            cudaSetDevice(getGPUIds()[j]);
 
             // run kernel
             runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
@@ -193,7 +193,12 @@ void launch_iterative_app(int argc, void* argv[]){
 
     // initialize DITTO environment
     // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
+    
+    printf(" -- Initializing DITTO\n");
+    fflush(stdout);
     initDITTO(argv[argc-1]);
+    printf(" -- DITTO initialized\n");
+    fflush(stdout);
 
     // APP: initialize data structure used by the application
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
@@ -211,14 +216,25 @@ void launch_iterative_app(int argc, void* argv[]){
     DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(int), "appData", initializeDTIDescription(simple, ordered));
 
 
+    printf(" -- Configuring DTI (%zu)\n", getNumberOfGPUs());
+    fflush(stdout);
+
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getState()->nGPUs, 0); // number of GPUs, old number of GPUs
+    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
+
+
+    printf(" -- Moving data CPU2GPU\n");
+    fflush(stdout);
 
     // send data to the GPU
     transferDataCPU2GPU();
 
     // program code (simulations)
     //printArr(appData);
+
+
+    printf(" -- Simulating\n");
+    fflush(stdout);
     simulateIterative(appData);
 
     // transfer data fron the GPUs to the CPU
@@ -267,7 +283,7 @@ void launch_phases_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getState()->nGPUs, 0); // number of GPUs, old number of GPUs
+    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -308,7 +324,7 @@ void launch_reconf_test_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getState()->nGPUs, 0); // number of GPUs, old number of GPUs
+    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();

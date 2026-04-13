@@ -3,15 +3,16 @@
 
 // declare a type to represent userFunctions for data transmission
 typedef void* (*GenericFunction)(void*);
-typedef struct jobControl_t jobControl_t;
+typedef struct jobControl_t jobControl_t; // RMS communication
+typedef struct jobResources_t jobResources_t; // RMS communication
 
 /* Structures */
 
 // Structure with the state information
 typedef struct state_t {
 
-    size_t nGPUs; // number of GPUs available for the application
-    size_t *idGPUs; // available GPU identifiers
+    // TODO: This must be jobResources
+    jobResources_t *jobResources;
 
     // function to update application state 
     GenericFunction updateState;
@@ -115,7 +116,7 @@ jobControl_t* getJobControl();
 
 /* [STATE] */
 /// initialize app state: number of GPUs and GPU identifiers
-state_t* initState(size_t nGPUs, size_t *idGPUs); 
+state_t* initState(jobResources_t *jobResources); 
 
 /// deallocate state memory
 void freeState(state_t *state);

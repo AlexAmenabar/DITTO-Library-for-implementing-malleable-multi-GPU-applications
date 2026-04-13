@@ -7,21 +7,34 @@
 
 #include "jobQueue.hpp"
 
+enum eventsEnum {
 
-typedef struct user_t {
+    JOBSTARTED,
+    JOBRECONFIGURED,
+    JOBFINISHED
+};
 
-    const char *userName;
+/// Job priority for scheduling decisions
+enum jobPriorityEnum {
 
-} user_t;
+    LOW,
+    MEDIUM,
+    HIGH,
+    DEADLINE
+};
 
+/// Job state
 enum jobStateEnum {
     
     PENDING,
     RUNNING,
+    RECONFIGURING,
     FINISHED,
     NOTLAUNCHED
 };
 
+
+/// Job type
 enum jobTypeEnum {
 
     RIGID,
@@ -30,7 +43,17 @@ enum jobTypeEnum {
     FLEXIBLE
 };
 
-// launcher associated to a pending job
+
+/// User structure. Name and priority
+typedef struct user_t {
+
+    const char *userName;
+    size_t userPriority;
+
+} user_t;
+
+
+/// Launcher associated to job. Is used to launch the job
 typedef struct jobLauncher_t {
 
     int argc;
@@ -41,13 +64,15 @@ typedef struct jobLauncher_t {
     size_t nReqMinGPUs; // minimum number of required GPUs
     size_t nReqGPUs; // requested GPUs or maximum number of GPUs
     jobTypeEnum jobType; // rigid, moldable, malleable, flexible (0, 1, 2, 3)
+    jobPriorityEnum jobPriority;
     size_t appType;
     size_t launchTimeStep; // time step in which it has been launched
+    
 
 } jobLauncher_t;
 
 
-// Resouces dedicated for running a job
+/// Resouces dedicated to a job
 typedef struct jobResources_t {
 
     size_t nGPUs;
@@ -56,12 +81,15 @@ typedef struct jobResources_t {
 } jobResources_t;
 
 
-// Structure to control job and inform reconfigurations
+/// Structure to control job and inform reconfigurations (shared by the RMS and the job threads)
 typedef struct jobControl_t {
+
+    // job identifier
+    size_t jobId;
 
     // "Signals" for communicating the job and the scheduler
 
-    int pendingReconf = 0; // whether there is any pending reconfiguration
+    char pendingReconf = 0; // whether there is any pending reconfiguration
     pthread_mutex_t lockPendingReconf; // lock for synchronization
 
     char sigGPUs; // 0, not GPUs needed; 1, GPU needed
@@ -76,6 +104,7 @@ typedef struct jobControl_t {
 
     // resources dedicated to the job
     jobResources_t *jobResources;
+    jobResources_t *prevJobResources;
 
 } jobControl_t;
 
@@ -106,7 +135,7 @@ typedef struct job_t{
 
 } job_t;
 
-// scheduler data structure
+/// Scheduler structure
 typedef struct schInfo_t {
 
     // System resources and availability
@@ -127,9 +156,12 @@ typedef struct schInfo_t {
     // Jobs already finished 
     jobQueue_t finishedJobs;
 
+    // Jobs with pending reconfigurations
+    jobQueue_t reconfiguringJobs;
+
 } schInfo_t;
 
-
+/// Timeline that stores jobs for adding them to the system
 typedef struct jobsTimeline_t {
 
     size_t nJobs;
@@ -137,57 +169,66 @@ typedef struct jobsTimeline_t {
 
 } jobsTimeline_t;
 
+
+
 // [JOB MANAGEMENT]
 
+/// Load job timeline from file and initialize job launchers
 jobsTimeline_t* loadJobsFromFile(const char* jobsFileName);
 
-// initialize system: users, resources...
+// NOT IMPLEMENTED YET
 void initSystem();
 
-// job scheduler
-void schedule(); 
+// NOT IMPLEMENTED YET
+void schedulingPolicy(); 
 
-
-// add job to pending queue
+/// Add job to pending queue
 void addPendingJob(jobLauncher_t *jobLauncher);
 
-// move job from pending to running queue, and launch
+/// Start running a job
 void launchJob(job_t *job, size_t pendingIndex, jobResources_t *jobResources);
 
-// move job from running job to finished job
+/// Schedule a reconfiguration to a running job
+void scheduleReconfiguration(job_t *job, size_t jobIndex, jobResources_t *jobResources);
+
+// Manage the reconfiguration finished
+void jobFinishedReconfiguration(job_t *job, size_t jobIndex);
+
+/// Job finished
 void finishJob();
 
-
-/// Init job control for communicating the scheduler and the job
+/// Initialize Job structure from the job launcher
 job_t* initJob(jobLauncher_t* jobLauncher);
 
-/// Function to be called by pthreads that executes the application associated to the job
+/// Function called by pthreads to start running the application in another thread (job)
 void* runJob(void *jobLauncherVoid);
 
+/// Recod an event related to a job
+void recordEvent(eventsEnum event, job_t *job);
 
 // [NOTIFICATIONS]
 
-// [Scheduler scope]
+// [RMS scope]
 /// Scheduler checks whether the job finished its execution
-int checkJobFinished(jobControl_t *jControl);
+char checkJobFinished(jobControl_t *jControl);
 
 /// Scheduler notifies a reconfiguration to a job
-void notifyReconfiguration(jobControl_t *jobControl, size_t nGPUs, size_t *idGPUs);
+void notifyReconfiguration(jobControl_t *jobControl);
 
 /// Scheduler checks whether the job indicated that it does not need GPUs
-int checkSignalNoGPUs(jobControl_t *jobControl);
+char checkSignalNoGPUs(jobControl_t *jobControl);
 
 /// Scheduler check wheter the job indicated that it need GPUs
-int checkSignalReqGPUs(jobControl_t *jobControl);
+char checkSignalReqGPUs(jobControl_t *jobControl);
 
 /// Scheduler checks if the job finished its reconfiguration
-int checkReconfigurationDone(jobControl_t *jobControl);
+char checkReconfigurationDone(jobControl_t *jobControl);
 
 
 // [Job scope notifications]
 
 /// Job checks if there are pending reconfigurations
-int checkIfReconfiguration(jobControl_t *jobControl);
+char checkIfReconfiguration(jobControl_t *jobControl);
 
 /// Notify to the scheduler that the job finished
 void jobFinished(jobControl_t* jControl);

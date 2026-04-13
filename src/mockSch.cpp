@@ -6,39 +6,47 @@
 #include <pthread.h>
 #include <time.h>
 
-// TODO: activate if CUDA [umcomment]
-/*#include <cuda.h>
-#include <cuda_runtime.h>
-#include <nvml.h>*/
-
 #include "mockSch.hpp"
 #include "jobQueue.hpp"
 
-// include matrix summation 
-// TODO: [unccomment]
-//#include "../testApps/toy_app_malleable.hpp"
 
+#ifndef TESTRMS
+
+// include CUDA related libraries
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <nvml.h>
+
+// include apps that use CUDA
+#include "../testApps/toy_app_malleable.hpp"
+
+#endif
 
 
 #define INTERVAL_US 1000000  // 0.1 seconds
 
-// TODO: schInfo not a global variable???
 
+// [TODO]: in the future they should be private?
 schInfo_t *schInfo;
 int timer = 0;
 FILE *f = NULL;
+size_t nextJobId = 0;
 
 
 jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
 
-    FILE *jobF;
-    void** argv;
-    jobsTimeline_t *jobsTimeline;
-    
+    // declare variables
+    FILE *jobF; // file to load jobs timeline from
+    void** argv; // arguments variable to initialize job launchers
+    jobsTimeline_t *jobsTimeline; // jobs timeline structure to store jobs data
+    size_t jobType, jobPriority;
+
+    // open file and allocate memory for timeline data
     jobF = fopen(jobsFileName, "r");
     jobsTimeline = (jobsTimeline_t*)calloc(1, sizeof(jobsTimeline_t));
 
-    // read number of jobs
+
+    // read the number of jobs
     fscanf(jobF, "%zu", &(jobsTimeline->nJobs));
 
     // allocate memory for job launchers
@@ -50,8 +58,7 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
         // get job launcher
         jobLauncher_t *jobLauncher = &(jobsTimeline->jobLaunchers[job]);
 
-        // load job information: job type, requested resources, launch time and app time
-        size_t jobType;
+        // load job type and set enum 
         fscanf(jobF, "%zu", &(jobType));
 
         switch (jobType){
@@ -72,54 +79,76 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
             break;
         }
 
+
+        // load job priority and set enum 
+        fscanf(jobF, "%zu", &(jobPriority));
+
+        switch (jobPriority){
+            case 0:
+            jobLauncher->jobPriority = LOW;
+            break;
+
+            case 1:
+            jobLauncher->jobPriority = MEDIUM;
+            break;
+            
+            case 2:
+            jobLauncher->jobPriority = HIGH;
+            break;
+            
+            case 3:
+            jobLauncher->jobPriority = DEADLINE;
+            break;
+        }
+
+        // load requested number of GPUs by the job
         fscanf(jobF, "%zu", &(jobLauncher->nReqGPUs));
         
-        // if job is moldable or flexible, load also the minimum number of resources
+        // if job is moldable or flexible, load also the minimum number of GPUs
         if(jobType == 1 || jobType == 3){
         
             fscanf(jobF, "%zu", &(jobLauncher->nReqMinGPUs));
         }
 
+        // load the time step in which the user launches the job to the system
         fscanf(jobF, "%zu", &(jobLauncher->launchTimeStep));
+
+        // load the application type
         fscanf(jobF, "%zu", &(jobLauncher->appType));
 
-
-        // load argc and argv and the function pointer for launching the job later
-        fscanf(jobF, "%d", &(jobLauncher->argc));
+        // load the arguments for launching the application
+        fscanf(jobF, "%d", &(jobLauncher->argc)); // number of arguments
 
         // allocate memory for argv
-        jobLauncher->argv = (void**)calloc(jobLauncher->argc + 2, sizeof(void*));
+        jobLauncher->argv = (void**)calloc(jobLauncher->argc + 2, sizeof(void*)); // 2 extra arguments: whether the job is malleable and the job control (latter set)
         
 
         // load argv parameters: application related parameters
         for(size_t arg = 0; arg<jobLauncher->argc; arg++){
             
-            // if not pointer will disappear after function ends
+            // if not pointer will disappear after function ends (would be stored in the stack)
             size_t *val = (size_t*)malloc(sizeof(size_t));
             fscanf(jobF, "%zu", val);
             jobLauncher->argv[arg] = (void*)val;
         }
         
-        // load whether application is or not malleable (or flexible) for allowing reconfiugrations during execution
+        // load whether application is or not malleable or flexible for allowing reconfiugrations during execution
         size_t *jmall = (size_t*)malloc(sizeof(size_t)); 
+        (*jmall) = 0;
         if(jobType == 2 || jobType == 3){
             (*jmall) = 1;
         }
-        else{
-            (*jmall) = 0;
-        }
         jobLauncher->argv[jobLauncher->argc-2] = (void*)jmall;
 
-        // [TODO] quit comment
-        // load application function pointer
-        /*if(jobLauncher->appType == 0){
+        // load application main function call pointer
+        if(jobLauncher->appType == 0){
 
             jobLauncher->launchFunc = &launch_iterative_app;
         }
         else if(jobLauncher->appType == 1){
 
             jobLauncher->launchFunc = &launch_phases_app;
-        }*/
+        }
 
         // print job information
         printf(" -- Printing job %zu information\n", job);
@@ -134,47 +163,123 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
     return jobsTimeline;
 }
 
+void initSystem(){
+    printf(" -- Not implemented yet\n");
+    fflush(stdout);
+    exit(-1); 
+}
+
+void schedulingPolicy(){
+    printf(" -- Not implemented yet\n");
+    fflush(stdout);
+    exit(-1); 
+}
 
 void addPendingJob(jobLauncher_t *jobLauncher){
 
-    // init job control
+    // initialize job structure
     job_t *job = initJob(jobLauncher);
-    job->jobState = PENDING; // change state
+    
+    // change job state
+    job->jobState = PENDING;
+    job->jobId = nextJobId;
+    nextJobId ++;
 
-    // start timer
+    // start pending timer
     clock_gettime(CLOCK_MONOTONIC, &(job->jobStartPending));
 
     // add job to pending queue
     addJobToQueue(&(schInfo->pendingJobs), job);
 }
 
-// remove job from pending queue and add to running job. Update system state too
 void launchJob(job_t *job, size_t pendingIndex, jobResources_t *jobResources){
 
     // update job state
     job->jobState = RUNNING;
 
-    // remove from pending queue
+    // remove job from pending queue
     removeJobFromQueueByIndex(&(schInfo->pendingJobs), pendingIndex);
   
-    // TODO: complete job information
-    job->jobControl->jobResources = jobResources; // set job resources: Revise this, I am updating a value that other thread can write too
+    // complete job information
+    printf(" Updating job control...\n");
+    fflush(stdout);
+    job->jobControl->jobResources = jobResources; // set job resources
+    job->jobControl->jobId = job->jobId;
 
-
-    // TODO: wait (simulate launch time) (should be improved?)
+    // wait (simulate launch time) (TODO: should be improved?)
     int sleepTime = (int)rand() % 5;
     sleep(sleepTime);
 
-
-    // TODO: launch job (thread)
-
+    // launch job (thread)
+    pthread_create(&(job->jobThread), NULL, runJob, (void*)(job->jobLauncher));
 
     // manage timers
     clock_gettime(CLOCK_MONOTONIC, &(job->jobEndPending));
     clock_gettime(CLOCK_MONOTONIC, &(job->jobStartRunning));
 
+    // record event
+    recordEvent(JOBSTARTED, job);
+
     // add job to running queue
     addJobToQueue(&(schInfo->runningJobs), job);
+}
+
+void scheduleReconfiguration(job_t *job, size_t jobIndex, jobResources_t *jobResources){
+
+    // get job control
+    jobControl_t *jobControl = job->jobControl;    
+
+    // update job state
+    job->jobState = RECONFIGURING;
+
+    
+    // wait (simulate allocation time) (TODO: should be improved?)
+    int sleepTime = (int)rand() % 5;
+    sleep(sleepTime);
+
+    // add job to reconfiguring queue
+    addJobToQueue(&(schInfo->reconfiguringJobs), job);
+
+
+    // set new job resources
+    if(jobControl->prevJobResources != NULL){
+        
+        // deallocate old job resources
+        free(jobControl->prevJobResources->idGPUs);
+        free(jobControl->prevJobResources);
+    }
+
+    // for events recording
+    jobControl->prevJobResources = jobControl->jobResources;
+
+    // set new job resources
+    jobControl->jobResources = jobResources;
+
+    // notify reconfiguration to job
+    notifyReconfiguration(jobControl);
+}
+
+void jobFinishedReconfiguration(job_t *job, size_t jobIndex){
+
+    // get job control
+    jobControl_t *jobControl = job->jobControl;    
+
+    // update job state
+    job->jobState = RUNNING;
+
+    // remove job from reconfiguring queue
+    removeJobFromQueueByIndex(&(schInfo->reconfiguringJobs), jobIndex);
+  
+    // set new job resources
+    if(jobControl->prevJobResources != NULL){
+        
+        // deallocate old job resources
+        free(jobControl->prevJobResources->idGPUs);
+        free(jobControl->prevJobResources);
+    }
+
+    // record event
+    recordEvent(JOBRECONFIGURED, job);
 }
 
 
@@ -190,6 +295,9 @@ void finishJob(job_t *job, size_t runningJobIndex){
     // manage timers
     clock_gettime(CLOCK_MONOTONIC, &(job->jobEndRunning));
 
+    // record event
+    recordEvent(JOBFINISHED, job);
+
     // update job state
     job->jobState = FINISHED;
 }
@@ -197,149 +305,169 @@ void finishJob(job_t *job, size_t runningJobIndex){
 
 job_t* initJob(jobLauncher_t* jobLauncher){
 
+    // allocate memory for the job structure
     job_t *job = (job_t*)calloc(1, sizeof(job_t));
+
+    // job not launched until it is in the pending list 
+    job->jobState = NOTLAUNCHED;
 
     // set job launcher
     job->jobLauncher = jobLauncher;
 
-
-    // initialize job control
+    // allocate memory for the job control structure and initialize
     jobControl_t *jobControl = (jobControl_t*)calloc(1, sizeof(jobControl_t));
     job->jobControl = jobControl; // set job control
 
-    jobControl->pendingReconf = 0;
+    // set jobLauncher just parameter
+    jobLauncher->argv[jobLauncher->argc-1] = (void*)(jobControl);
+
+    // initialize locks and notification variables
+    jobControl->pendingReconf = 0; // signal to indicate there is a pending reconfiguration (RMS --> job)
     pthread_mutex_init(&(jobControl->lockPendingReconf), NULL);
 
-    jobControl->sigGPUs = 0;
+    jobControl->sigGPUs = 0; // TODO: I don't remember what this signal is (job --> RMS)
     pthread_mutex_init(&(jobControl->lockSigGPUs), NULL);
 
-    jobControl->reqGPUs = 0;
+    jobControl->reqGPUs = 0; // signal for requesting GPUs (job --> RMS)
     pthread_mutex_init(&(jobControl->lockReqGPUs), NULL);
     pthread_cond_init(&(jobControl->condReqGPUs), NULL);
 
-    jobControl->finished = 0;
+    jobControl->finished = 0; // signal indicating that job finished (job --> RMS)
     pthread_mutex_init(&(jobControl->lockFinished), NULL);
 
-    // resources not initialized because they are set when process starts running
-
-    // 
-    job->jobState = NOTLAUNCHED;
-
+    // job resources are set when it is running
+    jobControl->jobResources = NULL; 
+    jobControl->prevJobResources = NULL;
 
     return job;
 }
 
-void* runJob(void *jobLauncherVoid){
+void* runJob(void *vJobLauncher){
 
-    jobLauncher_t *jobLauncher = (jobLauncher_t*)jobLauncherVoid;
+    jobLauncher_t *jobLauncher = (jobLauncher_t*)(vJobLauncher);
     jobLauncher->launchFunc(jobLauncher->argc, jobLauncher->argv);
     return NULL;
 }
 
+void recordEvent(eventsEnum event, job_t *job){
+
+    size_t gpu;
+    size_t jobId = job->jobId;
+
+    jobControl_t *jobControl = job->jobControl;
+
+    switch(event){
+        case JOBSTARTED:
+            for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
+                fprintf(f, "%zu,%zu,%d,start\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+            }
+        break;
+        case JOBRECONFIGURED:
+            for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
+                fprintf(f, "%zu,%zu,%d,start\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+            }
+            for(gpu = 0; gpu<jobControl->prevJobResources->nGPUs; gpu++){
+                fprintf(f, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+            }
+        break;
+        case JOBFINISHED:
+            for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
+                fprintf(f, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+            }
+        break;
+    }
+}
 
 
-/* [NOTIFICATIONS] */
+/* [NOTIFICATIONS / SIGNALS] */
 
-// [SCHEDULER SCOPE]
+// [RMS SCOPE: called by the RMS]
 
-int checkJobFinished(jobControl_t *jControl){
+char checkJobFinished(jobControl_t *jControl){
     
     // check whether there is any pending reconfiguration
-    int finished = 0;
+    char finished = 0;
     pthread_mutex_lock(&(jControl->lockFinished));
-    finished = jControl->finished;
-
-    if(finished == 1)
-        jControl->finished = 2;
-    
+    finished = jControl->finished;    
     pthread_mutex_unlock(&jControl->lockFinished);
 
     return finished;
 }
 
-
-// scheduler notifies to the app that there is a pending reconfiguration
-void notifyReconfiguration(jobControl_t *jobControl, size_t nGPUs, size_t *idGPUs){
+void notifyReconfiguration(jobControl_t *jobControl){
 
     size_t i;
-    jobResources_t *jobResources = jobControl->jobResources;
 
     // lock
     pthread_mutex_lock(&(jobControl->lockPendingReconf));
 
-    // program the reconfiguration if there are no pending reconfigurations
-    if(jobControl->pendingReconf == 0){
-
-        jobResources->nGPUs = nGPUs;
-
-        if(jobResources->idGPUs) 
-            free(jobResources->idGPUs);
- 
-        jobResources->idGPUs = (size_t*)calloc(nGPUs, sizeof(size_t));
-        for(i = 0; i<nGPUs; i++)
-            jobResources->idGPUs[i] = idGPUs[i];
-        
-        // new pending reconfiguration
-        jobControl->pendingReconf = 1;
-    }
-
+    // new pending reconfiguration
+    jobControl->pendingReconf = 1;
+    
     // unlock
     pthread_mutex_unlock(&(jobControl->lockPendingReconf));
 }
 
-int checkSignalNoGPUs(jobControl_t *jobControl){
+char checkSignalNoGPUs(jobControl_t *jobControl){
 
-    int signal = 0;
+    char signal = 0;
 
     // lock
     pthread_mutex_lock(&(jobControl->lockSigGPUs));
 
+    // get signal (not GPUs required)
     signal = jobControl->sigGPUs;
+
+    // deactivate signal
     jobControl->sigGPUs = 0;
 
     // unlock
     pthread_mutex_unlock(&(jobControl->lockSigGPUs));
 
+    // return signal
     return signal;
-
 }
 
-int checkSignalReqGPUs(jobControl_t *jobControl){
+char checkSignalReqGPUs(jobControl_t *jobControl){
 
-    size_t i;
-    int req = 0;
+    char req = 0;
 
     // lock
     pthread_mutex_lock(&(jobControl->lockReqGPUs));
 
+    // get signal value
     req = jobControl->reqGPUs;
+    
+    // deactivate signal (if it was active)
     jobControl->reqGPUs = 0;
 
     // unlock
     pthread_mutex_unlock(&(jobControl->lockReqGPUs));
 
+    // return signal value
     return req;
-
 }
 
-int checkReconfigurationDone(jobControl_t *jobControl){
+char checkReconfigurationDone(jobControl_t *jobControl){
 
-    int pending;
+    char pending;
+    
     // lock
     pthread_mutex_lock(&(jobControl->lockPendingReconf));
 
+    // get signal
     pending = jobControl->pendingReconf;
 
     // unlock
     pthread_mutex_unlock(&(jobControl->lockPendingReconf));
 
+    // return signal (if 0, reconfiguration is finished)
     return pending;
 }
 
 
 
-// [JOB SCOPE]
-
+// [JOB SCOPE: called by the job]
 
 void jobFinished(jobControl_t* jControl){
 
@@ -349,13 +477,18 @@ void jobFinished(jobControl_t* jControl){
     pthread_mutex_unlock(&(jControl->lockFinished));
 }
 
-int checkIfReconfiguration(jobControl_t *jobControl){
+char checkIfReconfiguration(jobControl_t *jobControl){
 
-    int localPendingReconf;
+    char localPendingReconf;
 
     // check whether there is any pending reconfiguration
     pthread_mutex_lock(&(jobControl->lockPendingReconf));
     localPendingReconf = jobControl->pendingReconf;
+
+    if(localPendingReconf == 1){
+        jobControl->pendingReconf = 2; // performing reconfiguration
+    }
+
     pthread_mutex_unlock(&jobControl->lockPendingReconf);
 
     return localPendingReconf;
@@ -1266,23 +1399,22 @@ void* timeCounter(void *finished){
     fprintf(f, "time_step,gpu_id,utilization_%%,power_W\n");
     fflush(f);
 
-
     // Initialize NVML
-    /*nvmlReturn_t result = nvmlInit();
+    nvmlReturn_t result = nvmlInit();
     if (result != NVML_SUCCESS) {
         printf("Failed to initialize NVML: %s\n", nvmlErrorString(result));
         exit(1);
     }
 
     unsigned int device_count;
-    nvmlDeviceGetCount(&device_count);*/
+    nvmlDeviceGetCount(&device_count);
 
     while((*finish) == 0){
 
         usleep(INTERVAL_US); // 1 seconds
         timer += 1; // update timer
 
-        /*// store info obtained from nvidia-smi
+        // store info obtained from nvidia-smi
         for (unsigned int i = 0; i < device_count; i++) {
 
             nvmlDevice_t device;
@@ -1296,22 +1428,18 @@ void* timeCounter(void *finished){
             unsigned int power;
             nvmlDeviceGetPowerUsage(device, &power);
 
-            fprintf(f, "%d,%u,%u,%.2f\n",
-                    timer,
-                    i,
-                    util.gpu,
-                    power / 1000.0);
+            fprintf(f, "%d,%u,%u,%.2f\n", timer, i, util.gpu, power / 1000.0);
         }
-        fflush(f);  // ensure data is written*/
+        fflush(f);  // ensure data is written
     }
 
-    /*nvmlShutdown();
-    fclose(f);*/
+    nvmlShutdown();
+    fclose(f);
 
     return NULL;
 }
 
-// function for simulating jobs launching
+/// [Thread] Function for simulating jobs launching from jobs timeline
 void* jobManager(void *voidJobsTimeline){
 
     jobsTimeline_t *jobsTimeline = (jobsTimeline_t*)voidJobsTimeline;
@@ -1373,6 +1501,8 @@ int main(int argc, char* argv[]){
     initQueue(&(schInfo->pendingJobs));
     initQueue(&(schInfo->runningJobs));
     initQueue(&(schInfo->finishedJobs));
+    initQueue(&(schInfo->reconfiguringJobs));
+
 
     // initialize scheduler jobs control information
     printf(" -- RMS initialized!\n");
@@ -1406,24 +1536,25 @@ int main(int argc, char* argv[]){
 
     // [DECLARE VARIABLES USED DURING SCHEDULING PROCESS]
     size_t nJobsFinished;
-    size_t iJob, nPendingJobs, nRunningJobs, nFinishedJobs, nReqGPUs, nReqMinGPUs, nLaunchGPUs;
+    size_t iJob, nPendingJobs, nRunningJobs, nFinishedJobs, nReconfiguringJobs, nReqGPUs, nReqMinGPUs, nLaunchGPUs;
     jobTypeEnum jobType;
 
     // get queues
     jobQueue_t *pendingQueue = &(schInfo->pendingJobs);
-    jobQueue_t *runninggQueue = &(schInfo->runningJobs);
+    jobQueue_t *runningQueue = &(schInfo->runningJobs);
     jobQueue_t *finishedQueue = &(schInfo->finishedJobs);
+    jobQueue_t *reconfiguringQueue = &(schInfo->reconfiguringJobs);
     job_t *job; 
     jobLauncher_t *jobLauncher;
     jobControl_t *jobControl;
 
     // initialize structure for job resources
-    jobResources_t *jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
-    jobResources->nGPUs = 0;
-    jobResources->idGPUs = NULL;
+    jobResources_t *jobResources;
 
 
     // [SCHEDULING LOOP]
+    printf(" -- Entering the scheduling loop\n");
+    fflush(stdout);
 
     nJobsFinished = 0; // loop until all jobs are finished
 
@@ -1437,20 +1568,23 @@ int main(int argc, char* argv[]){
         nPendingJobs = getNumberOfJobsInQueue(&(schInfo->pendingJobs));
         nRunningJobs = getNumberOfJobsInQueue(&(schInfo->runningJobs));
         nFinishedJobs = getNumberOfJobsInQueue(&(schInfo->finishedJobs));
+        nReconfiguringJobs = getNumberOfJobsInQueue(&(schInfo->reconfiguringJobs));
 
-        if(timer % 5 == 0)
-            printf(" -- Scheduling:\n ---- Pending jobs = %zu\n ---- Running jobs = %zu\n ---- Finished jobs = %zu\n", 
-                nPendingJobs, nRunningJobs, nFinishedJobs);
-
-
+        //if(timer % 5 == 0){
+            printf(" -- Scheduling:\n ---- Pending jobs = %zu\n ---- Running jobs = %zu\n ---- Finished jobs = %zu\n ---- Reconfiguring jobs = %zu\n", 
+                nPendingJobs, nRunningJobs, nFinishedJobs, nReconfiguringJobs);
+            fflush(stdout);
+        //}
 
         // [SCHEDULING ALGORITHM]: scheduling, reconfigurations...
 
         // loop over pending jobs and check whether any job can be launched
         for(iJob = 0; iJob<nPendingJobs; iJob++){
         
-            // get GPUs needed by job
+            // get job
             job = getJobFromQueue(pendingQueue, iJob);
+            
+            // get job type
             jobLauncher = job->jobLauncher;
             jobType = jobLauncher->jobType;
 
@@ -1458,18 +1592,17 @@ int main(int argc, char* argv[]){
             nReqGPUs = jobLauncher->nReqGPUs;
             nReqMinGPUs = nReqGPUs; // [FIXED or MALLEABLE]
 
-            // if job is moldable or flexible, store the minimum number of GPUs too
+            // if job is MOLDABLE or FLEXIBLE, store the minimum number of GPUs too
             if(jobType == MOLDABLE || jobType == FLEXIBLE){
                 nReqMinGPUs = jobLauncher->nReqMinGPUs;
             }
-
 
             // launch using the maximum number of GPUs possible
             nLaunchGPUs = 0;
             if(schInfo->nAvGPUs >= nReqGPUs){
                 nLaunchGPUs = nReqGPUs;
             }
-            // if job is moldable or flexible, enable there are [avGPUs >= minGPUs]
+            // if job is MOLDABLE or FLEXIBLE, enable there are [avGPUs >= minGPUs]
             else if(schInfo->nAvGPUs >= nReqMinGPUs){
                 nLaunchGPUs = schInfo->nAvGPUs;
             }
@@ -1477,30 +1610,31 @@ int main(int argc, char* argv[]){
             // launch job if possible
             if(nLaunchGPUs){
 
-                // TODO: Revise this, I'm not sure whether I should copy values instead of doing this, is confusing
+                // job resources for the job
+                jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+
+                // store number of GPUs for the job
                 jobResources->nGPUs = nLaunchGPUs;
 
-
-                // [ALLOCATE RESOURCES FOR JOB]: allocation policy, ORDERED
-
-                // deallocate old memory for idGPUs
-                if(jobResources->idGPUs) free(jobResources->idGPUs);
-                
                 // allocate memory for GPU ids
                 jobResources->idGPUs = (size_t*)malloc(nLaunchGPUs * sizeof(size_t));
                 
-                // find available GPUs
+                // find available GPUs and update system state
+                size_t gpuId = 0;
                 size_t jobGPU = 0;
-                for(size_t gpuId = 0; gpuId<nLaunchGPUs; gpuId++){
-                    
-                    if(schInfo->avGPUs[gpuId]){ // available
+                while(jobGPU < nLaunchGPUs){
+
+                    if(schInfo->avGPUs[gpuId]){
                         
                         jobResources->idGPUs[jobGPU] = gpuId; // allocate for the job
                         schInfo->avGPUs[gpuId] = 0; // no available
+                        jobGPU ++;
                     }
-                }
-                schInfo->nAvGPUs -= jobResources->nGPUs;
 
+                    gpuId ++;
+                }
+
+                schInfo->nAvGPUs -= jobResources->nGPUs;
 
                 // [LAUNCH JOB]
                 printf(" -- Launching job %zu with %zu GPUs\n", iJob, nLaunchGPUs);
@@ -1509,30 +1643,37 @@ int main(int argc, char* argv[]){
             }
         }
 
+        for(iJob = 0; iJob<nReconfiguringJobs; iJob ++){
+            
+            job = getJobFromQueue(reconfiguringQueue, iJob);
+
+            // check whether it finished the reconfiguration
+            char reconfigurationDone = checkReconfigurationDone(job->jobControl);
+
+            if(reconfigurationDone){
+
+                jobFinishedReconfiguration(job, iJob);
+            }
+        }
 
         // manage reconfigurations for running jobs
         for(iJob = 0; iJob<nRunningJobs; iJob++){
 
-
-        }
-
-        // look for finished jobs
-        for(iJob = 0; iJob<nFinishedJobs; iJob++){
-        
             // get GPUs needed by job
-            job = getJobFromQueue(finishedQueue, iJob);
+            job = getJobFromQueue(runningQueue, iJob);
             jobLauncher = job->jobLauncher;
 
-            // check whether job finished (lock, since job can be writing that it finished)
-            pthread_mutex_lock(&(jobControl->lockFinished));
-            char jobFinished = jobControl->finished;
-            pthread_mutex_unlock(&(jobControl->lockFinished));
+            // check whether the job finished
+            char jobFinished = checkJobFinished(job->jobControl);
 
             // if job finished, end thread
             if(jobFinished){
             
                 // finish job
                 finishJob(job, iJob);
+
+
+                // [TODO: refactorize to a function]
 
                 // deallocate resources
                 jobResources = job->jobControl->jobResources;
@@ -1543,17 +1684,28 @@ int main(int argc, char* argv[]){
                 size_t jobGPU = 0;
                 for(size_t gpuId = 0; gpuId<jobResources->nGPUs; gpuId++){
                         
-                    schInfo->avGPUs[jobResources->idGPUs[gpuId]] = 1; // is not avalaible again
+                    schInfo->avGPUs[jobResources->idGPUs[gpuId]] = 1; // GPU is avalaible again
                 }
 
                 // free job resources
                 free(jobResources->idGPUs);
                 free(jobResources);
+                free(jobControl->prevJobResources->idGPUs);
+                free(jobControl->prevJobResources);
+
+                free(job->jobControl);
+
+                free(job->jobLauncher->argv);
+                free(job->jobLauncher);
+                
                 // [TODO]: free job pointers (jobControl, job, jobLauncher...)
 
                 printf(" -- Job %zu finished\n", iJob);
                 fflush(stdout);
             }
+
+            // reconfiguration policy
+            printf(" -- No reconfiguration policy yet\n");
         }
     }
 
