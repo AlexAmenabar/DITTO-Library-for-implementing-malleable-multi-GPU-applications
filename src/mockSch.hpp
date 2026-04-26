@@ -4,8 +4,9 @@
 #include <pthread.h>
 #include <time.h>
 
-
 #include "jobQueue.hpp"
+
+#define MONITOR_STEPS 20
 
 enum eventsEnum {
 
@@ -69,6 +70,7 @@ typedef struct jobLauncher_t {
     size_t launchTimeStep; // time step in which it has been launched
     
 
+
 } jobLauncher_t;
 
 
@@ -109,6 +111,18 @@ typedef struct jobControl_t {
 } jobControl_t;
 
 
+typedef struct jobMonitoring_t {
+
+    double *gpuUsage; // usage per GPU (mean): sum, and after N steps, compute mean
+    size_t step; // steps with this configuration
+
+    //
+    size_t finalUsageGPUs;
+    double finalEnergyConsumption;
+
+} jobMonitoring_t;
+
+
 typedef struct job_t{
 
     // job identifier
@@ -119,7 +133,6 @@ typedef struct job_t{
 
     // monitoring information (move to another structure)
     struct timespec jobStartPending, jobEndPending, jobStartRunning, jobEndRunning;
-    double *gpuUsage;
 
     // job thread
     pthread_t jobThread;
@@ -133,6 +146,9 @@ typedef struct job_t{
     // job controller for communicating the RMS and the applicaiton
     jobControl_t *jobControl;
 
+    // job monitoring information
+    jobMonitoring_t *jobMonitor;
+
 } job_t;
 
 /// Scheduler structure
@@ -142,6 +158,11 @@ typedef struct schInfo_t {
     size_t nGPUs;
     size_t nAvGPUs;
     char *avGPUs; // 0 | 1
+    unsigned int *gpuJob; // job associated to the GPU
+    
+    // Monitoring
+    unsigned int (*gpuUtilization) [MONITOR_STEPS]; // (nGPUs)? arrays of MONITOR_STEPS
+    double (*gpuPower) [MONITOR_STEPS];
 
     // Users
     user_t *users;
@@ -197,6 +218,8 @@ void jobFinishedReconfiguration(job_t *job, size_t jobIndex);
 /// Job finished
 void finishJob();
 
+jobMonitoring_t* initJobMonitor(jobMonitoring_t *jobMonitor, jobResources_t *jobResources);
+
 /// Initialize Job structure from the job launcher
 job_t* initJob(jobLauncher_t* jobLauncher);
 
@@ -205,6 +228,13 @@ void* runJob(void *jobLauncherVoid);
 
 /// Recod an event related to a job
 void recordEvent(eventsEnum event, job_t *job);
+
+/// Allocate GPUs and update system availability state
+void allocateResources(schInfo_t *schInfo, jobResources_t *jobResources);
+
+/// Deallocate GPUs and update system availability state
+void deallocateResources(schInfo_t *schInfo, jobResources_t *jobResources);
+
 
 // [NOTIFICATIONS]
 

@@ -16,10 +16,22 @@
 void setGPUDevice(size_t i){
 
     state_t *state = getState();
-    //printf(" Setting dev %zu (%zu)\n", i, state->idGPUs[i]);
-    //fflush(stdout);
+    printf(" -- [APP] Setting dev %zu (real dev %zu)\n", i, getGPUIds()[i]);
+    fflush(stdout);
     cudaSetDevice(getGPUIds()[i]);
 }
+
+
+void resetGPUs(){
+    
+    // reinit all GPUs
+    for(size_t i = 0; i<getNumberOfGPUs(); i++){
+
+        cudaSetDevice(getGPUIds()[i]);
+        cudaDeviceReset();
+    }
+}
+
 
 void cpyDataCPU2GPU(DTI_t *DTI){
 
@@ -34,12 +46,14 @@ void cpyDataCPU2GPU(DTI_t *DTI){
     nGPUs = getNumberOfGPUs();
     idGPUs = getGPUIds();
 
+
     // copy data from the CPU to the GPUs following the information in the DTI structure
     DTIDesctiption_t *description = DTI->description;
     nPartitionsGPU = description->nPartitions;
 
     // accumulate partitions corresponding to the GPU contiguously
     void *cData = (void*)calloc(DTI->N, size);
+    
     nextIndex = 0;
     for(i = 0; i<nGPUs; i++){
 
@@ -56,6 +70,7 @@ void cpyDataCPU2GPU(DTI_t *DTI){
                 void *src = (char*)(DTI->cpuData) + offPartitionGPU * size;
                 void *dst = (char*)cData + nextIndex * size;
                 size_t nBytes = nPartitionGPU * size;
+
                 memcpy(dst, src, nBytes);
 
                 nextIndex += nPartitionGPU;
@@ -69,7 +84,7 @@ void cpyDataCPU2GPU(DTI_t *DTI){
 
         // set device
         setGPUDevice(i);
-	cudaDeviceSynchronize();
+	    cudaDeviceSynchronize();
 
         // allocate memory
         err = cudaMalloc(&(DTI->gpuData[i]), DTI->nPerGPU[i] * size); 
@@ -111,7 +126,7 @@ void cpyDataGPU2CPU(DTI_t *DTI){
 
         // set device
         setGPUDevice(i);
-//        cudaDeviceSynchronize();
+        cudaDeviceSynchronize();
 
         // move data from the GPU to the CPU
         err = cudaMemcpy((char*)cData + firstElement * size, DTI->gpuData[i], DTI->nPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
@@ -155,14 +170,4 @@ void cpyDataGPU2CPU(DTI_t *DTI){
         }
     }
     //printf("\n");
-}
-
-void resetGPUs(){
-    
-    // reinit all GPUs
-    for(size_t i = 0; i<getNumberOfGPUs(); i++){
-
-        cudaSetDevice(getGPUIds()[i]);
-        cudaDeviceReset();
-    }
 }

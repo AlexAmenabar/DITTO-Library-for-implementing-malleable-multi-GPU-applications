@@ -27,13 +27,13 @@ void printArr(appStruct_t *appData){
     }
 }
 
-void runCPU(float *arr, int N, int K){
+void runCPU(float *arr, size_t N, size_t K){
 
-    for(int i = 0; i<N; i++){
+    for(size_t i = 0; i<N; i++){
 
         float val = arr[i];
         
-        for (int k = 0; k < K; k++) {
+        for (size_t k = 0; k < K; k++) {
         
             val = val * 1.000001f + 0.000001f; //(val * 1.01) * 0.999;// * 0.99;// / 1.5;//1.000001f + 0.000001f;
         }
@@ -45,26 +45,26 @@ void runCPU(float *arr, int N, int K){
 
 void simulatePhases(appStruct_t *data){
 
-    int T = data->T;
-    int P = data->P;
+    size_t T = data->T;
+    size_t P = data->P;
     state_t *state = getState();
 
-    for(int t = 0; t<T; t++){
+    for(size_t t = 0; t<T; t++){
 
-        if(t%100 == 0){
+        /*if(t%100 == 0){
             
-            printf(" In t = %d\n", t);
+            printf(" In t = %zu\n", t);
             fflush(stdout);
-        }
+        }*/
 
         // reconfiguration point
         if(data->malleable == 1 && checkIfReconfiguration(getJobControl())){
-            printf(" > Reconfiguring application\n"); 
+            //printf(" > Reconfiguring application\n"); 
             reconfigure();
         }
 
         // loop over app phases
-        for(int p = 0; p<P; p++){
+        for(size_t p = 0; p<P; p++){
 
             // CPU
             if(data->phases[p] == 0){
@@ -117,7 +117,7 @@ void simulatePhases(appStruct_t *data){
                 
                 // firstprivates should be removed in the future
                 #pragma omp parallel for num_threads (getNumberOfGPUs())
-                for(int j = 0; j<(int)(getNumberOfGPUs()); j++){
+                for(size_t j = 0; j<(size_t)(getNumberOfGPUs()); j++){
 
                     appData = localData;
                     arrDTI = localArrDTI;
@@ -139,35 +139,44 @@ void simulatePhases(appStruct_t *data){
 
 }
 
+
+// TODO: REVISE WHAT HAPPENED HERE
+// UPDATE PHASES APP: argc, argc +1 
 void simulateIterative(appStruct_t *data){
 
-    int T = data->T;
+    size_t T = data->T;
     state_t *state = getState();
 
-    for(int t = 0; t<T; t++){
 
-        if(t%100 == 0){
+    for(size_t t = 0; t<T; t++){
+
+        /*if(t%100 == 0){
             
-            printf(" In t = %d\n", t);
+            printf(" In t = %zu\n", t);
             fflush(stdout);
-        }
+        }*/
 
         // reconfiguration point
         if(checkIfReconfiguration(getJobControl())){
-            printf(" > Reconfiguring application\n"); 
+            //printf(" > Reconfiguring application\n"); 
             reconfigure();
         }
 
-        // app
 
+        // app
         public_APP_Data_t *localData = appData;
         DTI_t **localArrDTI = arrDTI;
         size_t localnDTI = nDTI;
         size_t localmaxDTI = maxDTI;
-        
+            
+
+        size_t nGPUs = getNumberOfGPUs();
+        size_t *idGPUs = getGPUIds();
+
+  
         // firstprivates should be removed in the future
         #pragma omp parallel for num_threads (getNumberOfGPUs())
-        for(int j = 0; j<(int)(getNumberOfGPUs()); j++){
+        for(size_t j = 0; j<nGPUs; j++){ // get number of GPUs should receive a parameter such as appData or something
 
             appData = localData;
             arrDTI = localArrDTI;
@@ -175,7 +184,7 @@ void simulateIterative(appStruct_t *data){
             maxDTI = localmaxDTI;
 
             // set device
-            cudaSetDevice(getGPUIds()[j]);
+            cudaSetDevice(idGPUs[j]);
 
             // run kernel
             runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
@@ -187,6 +196,183 @@ void simulateIterative(appStruct_t *data){
 }
 
 
+void simulateIterativeCommunications(appStruct_t *data){
+    
+    // get number of time steps and state
+    size_t T = data->T;
+    state_t *state = getState();
+
+    for(size_t t = 0; t<T; t++){
+
+        // reconfiguration point, check if there is any pending reconfiguration
+        if(checkIfReconfiguration(getJobControl())){
+
+            reconfigure();
+        }
+
+
+        // copy data from global variables to local variables for enabling visibility to openMP threads (they are thread private)
+        public_APP_Data_t *localData = appData;
+        DTI_t **localArrDTI = arrDTI;
+        size_t localnDTI = nDTI;
+        size_t localmaxDTI = maxDTI;
+            
+
+        // get the information of the GPUs
+        size_t nGPUs = getNumberOfGPUs();
+        size_t *idGPUs = getGPUIds();
+
+  
+        #pragma omp parallel for num_threads (nGPUs)
+        for(size_t j = 0; j<nGPUs; j++){ // get number of GPUs should receive a parameter such as appData or something
+
+            appData = localData;
+            arrDTI = localArrDTI;
+            nDTI = localnDTI;
+            maxDTI = localmaxDTI;
+
+            // set device
+            cudaSetDevice(idGPUs[j]);
+
+            // run kernel
+            runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
+
+            // sync devices
+            cudaDeviceSynchronize();
+        }
+
+        // check if data should be synchronized
+        if(t % data->nIterationsForCommunications == 0){
+
+            // copy data to the GPU 0
+            int dstDev = 0, srcDev;
+            float **gpuArrs = (float**)calloc(nGPUs - 1, sizeof(float*));
+            cudaError_t err;
+
+            float **dData, *dSrcData, *dDstData;
+            dData = (float**)getDTIByIndex(0)->gpuData;
+            size_t *nPerGPU = getDTIByIndex(0)->nPerGPU;
+
+            for(srcDev = 1; srcDev<nGPUs; srcDev++){ // get number of GPUs should receive a parameter such as appData or something
+    
+                // allocate memory for data in the dst device
+                cudaSetDevice(dstDev); 
+                err = cudaMalloc(&gpuArrs[srcDev-1], nPerGPU[srcDev] * sizeof(float)); 
+
+
+                // copy data from source
+                cudaSetDevice(srcDev);
+
+                // try to enable peer access from src to dst
+                int canAccess = 0;
+                cudaDeviceCanAccessPeer(&canAccess, dstDev, srcDev);
+
+                // if can access, move data directly, else, use the CPU
+                if (canAccess) {
+
+                    printf(" -- P2P communications between GPUs from %d to %d enabled!\n", srcDev, dstDev);
+                    
+                    // enable peer access
+                    cudaDeviceEnablePeerAccess(dstDev, 0);
+
+                    // cpy data directly
+                    cudaMemcpyPeer(gpuArrs[srcDev-1], dstDev, dData[srcDev], srcDev, nPerGPU[srcDev]); // copy P2P
+
+                    printf(" -- P2P communication finished\n");
+                    fflush(stdout);
+
+                } else {
+
+                    printf(" -- P2P communications between GPUs from %d to %d not enabled!\n", srcDev, dstDev);
+
+                    // cpy data through the CPU
+                    // 1. allocate memory in the CPU
+                    float * tmpCPU = (float*)malloc(nPerGPU[srcDev] * sizeof(float));
+
+                    // copy to the CPU
+                    err = cudaMemcpy(tmpCPU, dData[srcDev], nPerGPU[srcDev], cudaMemcpyDeviceToHost); 
+
+                    // copy to the GPU
+                    err = cudaMemcpy(gpuArrs[srcDev-1], tmpCPU, nPerGPU[srcDev], cudaMemcpyHostToDevice); 
+
+                    // dellocate temporal CPU memory
+                    free(tmpCPU);
+
+                    printf(" -- Communication through CPU finished\n");
+                    fflush(stdout);
+                }
+
+                // sync devices
+                cudaDeviceSynchronize();
+            }
+            
+            // do some computation?
+
+
+            // now the 0 is the src
+            srcDev = 0;
+
+            // move data again to the src GPUs
+            for(dstDev = 1; dstDev<nGPUs; dstDev++){ // get number of GPUs should receive a parameter such as appData or something
+
+                // set src device and check peer access to dst 
+                cudaSetDevice(srcDev);
+
+                // try to enable peer access
+                int canAccess = 0;
+                cudaDeviceCanAccessPeer(&canAccess, dstDev, srcDev);
+
+                // if can access, move data directly, else, use the CPU
+                if (canAccess) {
+
+                    printf(" -- P2P communications between GPUs from %d to %d enabled!\n", srcDev, dstDev);
+                    
+                    // set current device
+                    cudaSetDevice(srcDev); // 
+                    cudaDeviceEnablePeerAccess(dstDev, 0); // enable peer access to destination device
+
+                    // cpy data directly
+                    cudaMemcpyPeer(dData[dstDev], dstDev, gpuArrs[dstDev-1], srcDev, nPerGPU[dstDev]); // copy P2P
+
+                    printf(" -- P2P communication finished\n");
+                    fflush(stdout);
+
+                } else {
+
+                    printf(" -- P2P communications between GPUs from %d to %d not enabled!\n", srcDev, dstDev);
+
+                    // cpy data through the CPU
+                    // 1. allocate memory in the CPU
+                    float* tmpCPU = (float*)malloc(nPerGPU[dstDev] * sizeof(float));
+
+                    // copy to the CPU
+                    err = cudaMemcpy(tmpCPU, gpuArrs[dstDev-1], nPerGPU[dstDev], cudaMemcpyDeviceToHost); 
+
+                    // copy to the GPU
+                    err = cudaMemcpy(dData[dstDev], tmpCPU, nPerGPU[dstDev], cudaMemcpyHostToDevice); 
+
+                    // dellocate temporal CPU memory
+                    free(tmpCPU);
+
+                    printf(" -- Communication through CPU finished\n");
+                    fflush(stdout);
+                }
+
+                // sync devices
+                cudaDeviceSynchronize();
+
+                // deallocate gpuArrs
+                cudaFree(gpuArrs[dstDev-1]);
+            }
+            
+            // deallocate 
+            free(gpuArrs);
+        }
+    }
+}
+
+
+
 void launch_iterative_app(int argc, void* argv[]){
 
     size_t i;
@@ -194,18 +380,22 @@ void launch_iterative_app(int argc, void* argv[]){
     // initialize DITTO environment
     // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
     
-    printf(" -- Initializing DITTO\n");
-    fflush(stdout);
-    initDITTO(argv[argc-1]);
-    printf(" -- DITTO initialized\n");
-    fflush(stdout);
+    //printf(" -- Initializing DITTO\n");
+    //fflush(stdout);
+    initDITTO(argv[argc+1]);
+    //printf(" -- DITTO initialized\n");
+    //fflush(stdout);
 
     // APP: initialize data structure used by the application
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
-    appData->N = *(int*)argv[0];
-    appData->T = *(int*)argv[1];
-    appData->K = *(int*)argv[2];
-    appData->malleable = *(int*)argv[argc-2];
+    appData->N = *(size_t*)argv[0];
+    appData->T = *(size_t*)argv[1];
+    appData->K = *(size_t*)argv[2];
+    appData->malleable = *(size_t*)argv[3]; // 3 == argc
+
+
+    //printf(" -- N = %zu, T = %zu, K = %zu\n", appData->N, appData->T, appData->K);
+    //fflush(stdout);
 
 
     appData->arr = (float*)calloc(appData->N, sizeof(float));
@@ -213,18 +403,10 @@ void launch_iterative_app(int argc, void* argv[]){
         appData->arr[i] = (float)rand()/(float)(RAND_MAX);
 
     // Initialize DTIs for automatically managing CPU-GPU communications
-    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(int), "appData", initializeDTIDescription(simple, ordered));
-
-
-    printf(" -- Configuring DTI (%zu)\n", getNumberOfGPUs());
-    fflush(stdout);
+    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered));
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
     configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
-
-
-    printf(" -- Moving data CPU2GPU\n");
-    fflush(stdout);
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -232,9 +414,6 @@ void launch_iterative_app(int argc, void* argv[]){
     // program code (simulations)
     //printArr(appData);
 
-
-    printf(" -- Simulating\n");
-    fflush(stdout);
     simulateIterative(appData);
 
     // transfer data fron the GPUs to the CPU
@@ -254,23 +433,23 @@ void launch_phases_app(int argc, void* argv[]){
 
     // initialize DITTO environment
     // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
-    initDITTO(argv[argc-1]);
+    initDITTO(argv[argc+1]);
 
     // APP: initialize data structure used by the application
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
-    appData->N = *(int*)argv[0];
-    appData->T = *(int*)argv[1];
-    appData->K = *(int*)argv[2];
-    appData->cpuK = *(int*)argv[3];
-    appData->P = *(int*)argv[4];
+    appData->N = *(size_t*)argv[0];
+    appData->T = *(size_t*)argv[1];
+    appData->K = *(size_t*)argv[2];
+    appData->cpuK = *(size_t*)argv[3];
+    appData->P = *(size_t*)argv[4];
 
-    appData->phases = (int*)calloc(appData->P, sizeof(int));
+    appData->phases = (size_t*)calloc(appData->P, sizeof(size_t));
     for(i = 0; i<appData->P; i++){
 
-        appData->phases[i] = *(int*)argv[i + 5];
+        appData->phases[i] = *(size_t*)argv[i + 5];
     }
 
-    appData->malleable = *(int*)argv[argc-2];
+    appData->malleable = *(size_t*)argv[argc];
 
 
     // allocate memory for App Data
@@ -279,7 +458,7 @@ void launch_phases_app(int argc, void* argv[]){
         appData->arr[i] = (float)rand()/(float)(RAND_MAX);
 
     // Initialize DTIs for automatically managing CPU-GPU communications
-    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(int), "appData", initializeDTIDescription(simple, ordered));
+    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(size_t), "appData", initializeDTIDescription(simple, ordered));
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
@@ -291,6 +470,53 @@ void launch_phases_app(int argc, void* argv[]){
     // program code (simulations)
     //printArr(appData);
     simulatePhases(appData);
+
+    // transfer data fron the GPUs to the CPU
+    transferDataGPU2CPU();
+    
+    // signal that job finished
+    jobFinished(getJobControl());
+
+    pthread_exit(NULL);
+}
+
+
+void launch_communications_app(int argc, void* argv[]){
+
+    size_t i;
+
+    // initialize DITTO environment
+    // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
+    initDITTO(argv[argc+1]);
+
+    // APP: initialize data structure used by the application
+    appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
+    appData->N = *(size_t*)argv[0];
+    appData->T = *(size_t*)argv[1];
+    appData->K = *(size_t*)argv[2];
+    appData->nIterationsForCommunications = *(size_t*)argv[3];
+
+    appData->malleable = *(size_t*)argv[argc];
+
+
+    // allocate memory for App Data
+    appData->arr = (float*)calloc(appData->N, sizeof(float));
+    for(i = 0; i<appData->N; i++)
+        appData->arr[i] = (float)rand()/(float)(RAND_MAX);
+
+    // Initialize DTIs for automatically managing CPU-GPU communications
+    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(size_t), "appData", initializeDTIDescription(entire, nonerme));
+
+
+    // configure all DTIs for automatic data transference // TODO: configure in initialization
+    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
+
+    // send data to the GPU
+    transferDataCPU2GPU();
+
+    // program code (simulations)
+    //printArr(appData);
+    simulateIterativeCommunications(appData);
 
     // transfer data fron the GPUs to the CPU
     transferDataGPU2CPU();

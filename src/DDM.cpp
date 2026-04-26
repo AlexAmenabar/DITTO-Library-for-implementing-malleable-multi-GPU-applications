@@ -27,8 +27,8 @@ void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
     if(DTI->type == 0){
 
         ////////////////////////////////////////////////////
-        printf(" -- First phase\n");
-        fflush(stdout);
+        //printf(" -- First phase\n");
+        //fflush(stdout);
         // deallocate information related to old configuration (nOldGPUs)
         for(i = 0; i<nOldGPUs; i++){
 
@@ -43,8 +43,8 @@ void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
             free(DTI->offsetPerPartition);
 
         // allocate for new configuration (nGPUs)
-        printf(" -- Second phase\n");
-        fflush(stdout);
+        //printf(" -- Second phase\n");
+        //fflush(stdout);
         DTI->nPerGPU = (size_t*)calloc(nGPUs, sizeof(size_t));
         DTI->nPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
         DTI->offsetPerPartition = (size_t**)calloc(nGPUs, sizeof(size_t*));
@@ -59,8 +59,8 @@ void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
 
 
         ////////////////////////////////////////////////////
-        printf(" -- Third phase\n");
-        fflush(stdout);
+        //printf(" -- Third phase\n");
+        //fflush(stdout);
         // deallocate old GPU pointers and allocate new ones
         if(DTI->gpuData) 
             free(DTI->gpuData);
@@ -72,12 +72,12 @@ void configureDTI(DTI_t *DTI, size_t nGPUs, size_t nOldGPUs){
 
 
         ////////////////////////////////////////////////////
-        printf(" -- 4. phase\n");
-        fflush(stdout);
+        //printf(" -- 4. phase\n");
+        //fflush(stdout);
         // configure data following the DTI description
         switch (DTI->description->tpttEnum){
 
-            case all:
+            case entire:
                 configureEntireTransmission(DTI, nGPUs);
                 break;
 
@@ -120,8 +120,8 @@ void configureSimpleTransmission(DTI_t *DTI, size_t nGPUs){
     size_t nElements, rElements;
     DTIDesctiption_t *description = DTI->description;
 
-    printf(" -- %zu, %zu\n", N, nGPUs);
-    fflush(stdout);
+    //printf(" -- %zu, %zu\n", N, nGPUs);
+    //fflush(stdout);
 
     // compute the number of elements per GPU
     nElements = N / nGPUs;

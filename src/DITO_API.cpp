@@ -376,7 +376,7 @@ DTIDesctiption_t* initializeDTIDescription(transmissionPatternsEnum tpttEnum, re
 
     DTIDesctiption_t *description = (DTIDesctiption_t*)calloc(1, sizeof(DTIDesctiption_t));
 
-    if(tpttEnum != all && tpttEnum != simple){
+    if(tpttEnum != entire && tpttEnum != simple){
 
         printf(" -- 'initializeDTIDescription' only supports 'all' and 'simple' options. Use 'initializeComplexDTIDescription' instead.\n");
         exit(1);

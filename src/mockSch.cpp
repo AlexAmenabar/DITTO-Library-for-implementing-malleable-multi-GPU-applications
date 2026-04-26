@@ -29,8 +29,12 @@
 // [TODO]: in the future they should be private?
 schInfo_t *schInfo;
 int timer = 0;
-FILE *f = NULL;
-size_t nextJobId = 0;
+FILE *fEventRecord = NULL, *fUsage = NULL, *fOutput = NULL;
+size_t nextJobId = 1;
+
+size_t usageGPUs = 0;
+double usagePower = 0.0;
+size_t registeredUsages = 0;
 
 
 jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
@@ -103,9 +107,9 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
 
         // load requested number of GPUs by the job
         fscanf(jobF, "%zu", &(jobLauncher->nReqGPUs));
-        
-        // if job is moldable or flexible, load also the minimum number of GPUs
-        if(jobType == 1 || jobType == 3){
+
+        // if job is moldable, malleable or flexible, load also the minimum number of GPUs
+        if(jobType >= 1){
         
             fscanf(jobF, "%zu", &(jobLauncher->nReqMinGPUs));
         }
@@ -120,11 +124,11 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
         fscanf(jobF, "%d", &(jobLauncher->argc)); // number of arguments
 
         // allocate memory for argv
-        jobLauncher->argv = (void**)calloc(jobLauncher->argc + 2, sizeof(void*)); // 2 extra arguments: whether the job is malleable and the job control (latter set)
+        jobLauncher->argv = (void**)malloc((jobLauncher->argc + 2) * sizeof(void*)); // 2 extra arguments: whether the job is malleable and the job control (latter set)
         
 
         // load argv parameters: application related parameters
-        for(size_t arg = 0; arg<jobLauncher->argc; arg++){
+        for(int arg = 0; arg<jobLauncher->argc; arg++){
             
             // if not pointer will disappear after function ends (would be stored in the stack)
             size_t *val = (size_t*)malloc(sizeof(size_t));
@@ -138,7 +142,7 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
         if(jobType == 2 || jobType == 3){
             (*jmall) = 1;
         }
-        jobLauncher->argv[jobLauncher->argc-2] = (void*)jmall;
+        jobLauncher->argv[jobLauncher->argc] = (void*)jmall;
 
         // load application main function call pointer
         if(jobLauncher->appType == 0){
@@ -151,12 +155,12 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
         }
 
         // print job information
-        printf(" -- Printing job %zu information\n", job);
+        /*printf(" -- Printing job %zu information\n", job);
         printf(" ---- Job type %zu\n", jobType);
         printf(" ---- Required gpus %zu\n", jobLauncher->nReqGPUs);
         printf(" ---- Required min. gpus %zu\n", jobLauncher->nReqMinGPUs);
         printf(" ---- Job launch time step %zu\n", jobLauncher->launchTimeStep);
-        printf(" ---- Job application type %zu\n", jobLauncher->appType);
+        printf(" ---- Job application type %zu\n", jobLauncher->appType);*/
         fflush(stdout);
     }
 
@@ -201,10 +205,11 @@ void launchJob(job_t *job, size_t pendingIndex, jobResources_t *jobResources){
     removeJobFromQueueByIndex(&(schInfo->pendingJobs), pendingIndex);
   
     // complete job information
-    printf(" Updating job control...\n");
-    fflush(stdout);
     job->jobControl->jobResources = jobResources; // set job resources
     job->jobControl->jobId = job->jobId;
+
+    // initialize job monitor (already allocated)
+    job->jobMonitor = initJobMonitor(job->jobMonitor, jobResources);
 
     // wait (simulate launch time) (TODO: should be improved?)
     int sleepTime = (int)rand() % 5;
@@ -270,13 +275,8 @@ void jobFinishedReconfiguration(job_t *job, size_t jobIndex){
     // remove job from reconfiguring queue
     removeJobFromQueueByIndex(&(schInfo->reconfiguringJobs), jobIndex);
   
-    // set new job resources
-    if(jobControl->prevJobResources != NULL){
-        
-        // deallocate old job resources
-        free(jobControl->prevJobResources->idGPUs);
-        free(jobControl->prevJobResources);
-    }
+    // update job monitor to the new resources
+    job->jobMonitor = initJobMonitor(job->jobMonitor, jobControl->jobResources);
 
     // record event
     recordEvent(JOBRECONFIGURED, job);
@@ -302,6 +302,15 @@ void finishJob(job_t *job, size_t runningJobIndex){
     job->jobState = FINISHED;
 }
 
+jobMonitoring_t* initJobMonitor(jobMonitoring_t *jobMonitor, jobResources_t *jobResources){
+
+    if(jobMonitor->gpuUsage) free(jobMonitor->gpuUsage);
+
+    jobMonitor->gpuUsage = (double*)calloc(jobResources->nGPUs, sizeof(double));
+    jobMonitor->step = 0;
+
+    return jobMonitor;
+}
 
 job_t* initJob(jobLauncher_t* jobLauncher){
 
@@ -319,7 +328,7 @@ job_t* initJob(jobLauncher_t* jobLauncher){
     job->jobControl = jobControl; // set job control
 
     // set jobLauncher just parameter
-    jobLauncher->argv[jobLauncher->argc-1] = (void*)(jobControl);
+    jobLauncher->argv[jobLauncher->argc+1] = (void*)(jobControl);
 
     // initialize locks and notification variables
     jobControl->pendingReconf = 0; // signal to indicate there is a pending reconfiguration (RMS --> job)
@@ -338,6 +347,13 @@ job_t* initJob(jobLauncher_t* jobLauncher){
     // job resources are set when it is running
     jobControl->jobResources = NULL; 
     jobControl->prevJobResources = NULL;
+
+
+    // initialize job monitor
+    jobMonitoring_t *jobMonitor = (jobMonitoring_t*)calloc(1,sizeof(jobMonitoring_t));
+    jobMonitor->gpuUsage = NULL; // we need to know how much resources are allocated for the job
+    jobMonitor->step = 0;
+    job->jobMonitor = jobMonitor;
 
     return job;
 }
@@ -359,23 +375,52 @@ void recordEvent(eventsEnum event, job_t *job){
     switch(event){
         case JOBSTARTED:
             for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
-                fprintf(f, "%zu,%zu,%d,start\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+                fprintf(fEventRecord, "%zu,%zu,%d,start\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
             }
         break;
         case JOBRECONFIGURED:
             for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
-                fprintf(f, "%zu,%zu,%d,start\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+                fprintf(fEventRecord, "%zu,%zu,%d,start\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
             }
             for(gpu = 0; gpu<jobControl->prevJobResources->nGPUs; gpu++){
-                fprintf(f, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+                fprintf(fEventRecord, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
             }
         break;
         case JOBFINISHED:
             for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
-                fprintf(f, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+                fprintf(fEventRecord, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
             }
         break;
     }
+}
+
+
+// allocate GPUs
+void allocateResources(schInfo_t *schInfo, jobResources_t *jobResources){
+
+    size_t i;
+    
+    for(i = 0; i<jobResources->nGPUs; i++){
+
+        size_t gpu = jobResources->idGPUs[i];
+        schInfo->avGPUs[gpu] = 0; // not available
+    }
+
+    schInfo->nAvGPUs -= jobResources->nGPUs;
+}
+
+// deallocate GPUs
+void deallocateResources(schInfo_t *schInfo, jobResources_t *jobResources){
+
+    size_t i;
+    
+    for(i = 0; i<jobResources->nGPUs; i++){
+
+        size_t gpu = jobResources->idGPUs[i];
+        schInfo->avGPUs[gpu] = 1; // not available
+    }
+
+    schInfo->nAvGPUs += jobResources->nGPUs;
 }
 
 
@@ -519,885 +564,18 @@ void notifyReqGPUs(jobControl_t *jobControl){
 }
 
 
-// [WORKLOADS]
-/*
-int workload1(int argc, char* argv[]){
-
-    // [Launch job 0]
-    // job resources
-    size_t gpus = 4;
-    size_t *ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    ids[2] = 2;
-    ids[3] = 3;
-    schInfo.activeJobsControl[0].jobId = 0;
-    initJobControl(&(schInfo.activeJobsControl[0]), gpus, ids); // job-sched communication
-
-    // job arguments
-    size_t j0a = 50000;
-    size_t j0b = 2000000;
-    size_t j0c = 1000;
-    size_t j0mall = 0;
-    void* j0args[5];
-    j0args[0] = &j0a;
-    j0args[1] = &j0b;
-    j0args[2] = &j0c;
-    j0args[3] = &j0mall;
-    j0args[4] = &(schInfo.activeJobsControl[0]);
-
-    // define job
-    jobLauncher_t job0;
-    job0.argc = 5;
-    job0.argv = j0args;
-    job0.launchFunc = &launch_iterative_app;
-
-    // [record event]: GPUs allocated for job
-    fprintf(f, "0,0,%d,start\n1,0,%d,start\n2,0,%d,start\n3,0,%d,start\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr0;
-    pthread_create(&thr0, NULL, runJob, (void*)(&job0));
-
-    // wait until job finishes
-    pthread_join(thr0, NULL);
-
-
-    // [record event]: deallocate resources
-    fprintf(f, "0,0,%d,end\n1,0,%d,end\n2,0,%d,end\n3,0,%d,end\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-
-    // [launch job 1]
-    gpus = 2;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    schInfo.activeJobsControl[1].jobId = 1;
-    initJobControl(&(schInfo.activeJobsControl[1]), gpus, ids);
-
-    size_t j1a = 25000000; 
-    size_t j1b = 800;
-    size_t j1c = 10000;
-    size_t j1mall = 0;
-    void* j1args[5];
-    j1args[0] = &j1a;
-    j1args[1] = &j1b;
-    j1args[2] = &j1c;
-    j1args[3] = &j1mall;
-    j1args[4] = &(schInfo.activeJobsControl[1]);
-
-    // define job
-    jobLauncher_t job1;
-    job1.argc = 5;
-    job1.argv = j1args;
-    job1.launchFunc = &launch_iterative_app;
-
-
-    // [record event]: allocate GPUs for job
-    fprintf(f, "0,1,%d,start\n1,1,%d,start\n", timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr1;
-    pthread_create(&thr1, NULL, runJob, (void*)(&job1));
-
-
-    // [launch job 2]
-    size_t j2a = 10000000;
-    size_t j2b = 2000;
-    size_t j2c = 15000;
-    size_t j2mall = 0;
-
-    gpus = 2;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 2;
-    ids[1] = 3;
-    initJobControl(&(schInfo.activeJobsControl[2]), gpus, ids);
-
-    void* argsj2[5];
-    argsj2[0] = &j2a;
-    argsj2[1] = &j2b;
-    argsj2[2] = &j2c;
-    argsj2[3] = &j2mall;
-    argsj2[4] = &(schInfo.activeJobsControl[2]);
-
-    // define job
-    jobLauncher_t job2;
-    job2.argc = 5;
-    job2.argv = argsj2;
-    job2.launchFunc = &launch_iterative_app;
-
-    // [record event]: allocate two GPUs for job
-    fprintf(f, "2,2,%d,start\n3,2,%d,start\n", timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr2;
-    pthread_create(&thr2, NULL, runJob, (void*)(&job2));
-
-
-    // job finished, deallocate resources
-    pthread_join(thr1, NULL);
-    // [record event]
-    fprintf(f, "0,1,%d,end\n1,1,%d,end\n", timer,timer);
-    fflush(f);
-    // [record event]
-
-    // job finished, deallocate resources
-    pthread_join(thr2, NULL);
-    // [record event]
-    fprintf(f, "2,2,%d,end\n3,2,%d,end\n", timer,timer);
-    fflush(f);
-    // [record event]
-
-
-    // wait 5 seconds before ending for finishing information storage
-    sleep(5);
-
-    return 1;
-}
-
-
-int workload1_malleable(int argc, char* argv[]){
-
-    // [launch job 1]
-    size_t gpus = 4;
-    size_t *ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    ids[2] = 2;
-    ids[3] = 3;
-    schInfo.activeJobsControl[0].jobId = 0;
-    initJobControl(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-    // job arguments
-    size_t j0a = 50000;
-    size_t j0b = 2000000;
-    size_t j0c = 1000;
-    size_t j0mall = 1;
-    void* j0args[5];
-    j0args[0] = &j0a;
-    j0args[1] = &j0b;
-    j0args[2] = &j0c;
-    j0args[3] = &j0mall;
-    j0args[4] = &(schInfo.activeJobsControl[0]);
-
-    // define job
-    jobLauncher_t job0;
-    job0.argc = 5;
-    job0.argv = j0args;
-    job0.launchFunc = &launch_iterative_app;
-
-    // [record event]
-    fprintf(f, "0,0,%d,start\n1,0,%d,start\n2,0,%d,start\n3,0,%d,start\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr0;
-    pthread_create(&thr0, NULL, runJob, (void*)(&job0));
-
-    printf(" Job 0 launched!\n");
-    fflush(stdout);
-
-
-    // reconfigure app 0
-    sleep(4);
-
-    free(ids);
-    gpus = 2;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    notifyReconfiguration(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-    // check if the job finished the reconfiguration
-    int done = 0;
-    while(done == 0){
-        done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
-        sleep(1);
-    }
-
-    // [record event]
-    fprintf(f, "2,0,%d,end\n3,0,%d,end\n", timer,timer);
-    fflush(f);
-    // [record event]
-
-
-    // [launch job 2]
-    gpus = 2;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 2;
-    ids[1] = 3;
-
-    schInfo.activeJobsControl[1].jobId = 1;
-    initJobControl(&(schInfo.activeJobsControl[1]), gpus, ids);
-
-    size_t j1a = 25000000; //1000000;
-    size_t j1b = 800;
-    size_t j1c = 10000;
-    size_t j1mall = 1;
-    void* j1args[5];
-    j1args[0] = &j1a;
-    j1args[1] = &j1b;
-    j1args[2] = &j1c;
-    j1args[3] = &j1mall;
-    j1args[4] = &(schInfo.activeJobsControl[1]);
-
-    // define job
-    jobLauncher_t job1;
-    job1.argc = 5;
-    job1.argv = j1args;
-    job1.launchFunc = &launch_iterative_app;
-
-    // [record event]
-    fprintf(f, "2,1,%d,start\n3,1,%d,start\n", timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr1;
-    pthread_create(&thr1, NULL, runJob, (void*)(&job1));
-    printf(" Job 1 launched!\n");
-    fflush(stdout);
-
-
-    // reconfigure app
-    sleep(2);
-
-    free(ids);
-    gpus = 1;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-
-    notifyReconfiguration(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-    // check if the job finished the reconfiguration
-    done = 0;
-    while(done == 0){
-        done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
-        sleep(1);
-    }
-
-    // [record event]
-    fprintf(f, "1,0,%d,end\n", timer);
-    fflush(f);
-    // [record event]
-
-
-    // [launch job 3]
-    size_t j2a = 10000000; //1000000;
-    size_t j2b = 2000;
-    size_t j2c = 15000;
-    size_t j2mall = 0;
-
-    gpus = 1;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 1;
-    initJobControl(&(schInfo.activeJobsControl[2]), gpus, ids);
-
-    void* argsj2[5];
-    argsj2[0] = &j2a;
-    argsj2[1] = &j2b;
-    argsj2[2] = &j2c;
-    argsj2[3] = &j2mall;
-    argsj2[4] = &(schInfo.activeJobsControl[2]);
-
-    // define job
-    jobLauncher_t job2;
-    job2.argc = 5;
-    job2.argv = argsj2;
-    job2.launchFunc = &launch_iterative_app;
-
-    // [record event]
-    fprintf(f, "1,2,%d,start\n", timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr2;
-    pthread_create(&thr2, NULL, runJob, (void*)(&job2));
-
-    printf(" Job 2 launched!\n");
-    fflush(stdout);
-
-
-    pthread_join(thr0, NULL);
-    printf(" Job 0 finished!\n");
-    fflush(stdout);
-
-    // [record event]
-    fprintf(f, "0,0,%d,end\n", timer);
-    fflush(f);
-    // [record event]
-
-    // reconf app 2
-    free(ids);
-    gpus = 2;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    notifyReconfiguration(&(schInfo.activeJobsControl[2]), gpus, ids);
-
-    // check if the job finished the reconfiguration
-    done = 0;
-    while(done == 0){
-        done = !checkReconfigurationDone(&(schInfo.activeJobsControl[2]));
-        sleep(1);
-    }
-
-    // [record event]
-    fprintf(f, "0,2,%d,start\n", timer);
-    fflush(f);
-    // [record event]
-
-
-    pthread_join(thr1, NULL);
-    printf(" Job 1 finished!\n");
-    fflush(stdout);
-
-    // [record event]
-    fprintf(f, "2,1,%d,end\n3,1,%d,end\n", timer,timer);
-    fflush(f);
-    // [record event]
-
-
-    // reconf app 1
-    free(ids);
-    gpus = 4;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    ids[2] = 2;
-    ids[3] = 3;
-    notifyReconfiguration(&(schInfo.activeJobsControl[2]), gpus, ids);
-
-    // [record event]
-    fprintf(f, "0,2,%d,start\n1,2,%d,start\n2,2,%d,start\n3,2,%d,start\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    // check if the job finished the reconfiguration
-    done = 0;
-    while(done == 0){
-        done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
-        sleep(1);
-    }
-
-
-    pthread_join(thr2, NULL);
-    printf(" Job 2 finished!\n");
-    fflush(stdout);
-
-    // [record event]
-    fprintf(f, "0,2,%d,end\n1,2,%d,end\n2,2,%d,end\n3,2,%d,end\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    sleep(5);
-
-    return 1;
-}
-
-
-
-int workload2(int argc, char* argv[]){
-
-    // [launch job 1]
-    size_t gpus = 4;
-    size_t *ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    ids[2] = 2;
-    ids[3] = 3;
-    schInfo.activeJobsControl[0].jobId = 0;
-    initJobControl(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-
-    // job arguments
-    size_t j0a = 50000000;
-    size_t j0b = 5;
-    size_t j0c = 500000;
-    size_t j0d = 100;
-    size_t j0e = 2;
-    size_t j0p1 = 0;
-    size_t j0p2 = 1;
-    size_t j0mall = 0;
-
-    void* j0args[9];
-    j0args[0] = &j0a;
-    j0args[1] = &j0b;
-    j0args[2] = &j0c;
-    j0args[3] = &j0d;
-    j0args[4] = &j0e;
-    j0args[5] = &j0p1;
-    j0args[6] = &j0p2;
-    j0args[7] = &j0mall;
-    j0args[8] = &(schInfo.activeJobsControl[0]);
-
-    // define job
-    jobLauncher_t job0;
-    job0.argc = 9;
-    job0.argv = j0args;
-    job0.launchFunc = &launch_phases_app;
-
-    // [record event]
-    fprintf(f, "0,0,%d,start\n1,0,%d,start\n2,0,%d,start\n3,0,%d,start\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr0;
-    pthread_create(&thr0, NULL, runJob, (void*)(&job0));
-
-    printf(" Job 0 launched!\n");
-    fflush(stdout);
-
-
-    pthread_join(thr0, NULL);
-
-    // [record event]
-    fprintf(f, "0,0,%d,end\n1,0,%d,end\n2,0,%d,end\n3,0,%d,end\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-
-    // [launch job 1]
-    gpus = 4;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    ids[2] = 2;
-    ids[3] = 3;
-    schInfo.activeJobsControl[1].jobId = 1;
-    initJobControl(&(schInfo.activeJobsControl[1]), gpus, ids);
-
-
-    // job arguments
-    size_t j1a = 10000000;
-    size_t j1b = 100;
-    size_t j1c = 500000;
-    size_t j1mall = 0;
-
-    void* j1args[4];
-    j1args[0] = &j1a;
-    j1args[1] = &j1b;
-    j1args[2] = &j1c;
-    j0args[3] = &j1mall;
-    j1args[4] = &(schInfo.activeJobsControl[1]);
-
-    // define job
-    jobLauncher_t job1;
-    job1.argc = 5;
-    job1.argv = j1args;
-    job1.launchFunc = &launch_iterative_app;
-
-    // [record event]
-    fprintf(f, "0,1,%d,start\n1,1,%d,start\n2,1,%d,start\n3,1,%d,start\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr1;
-    pthread_create(&thr1, NULL, runJob, (void*)(&job1));
-
-    printf(" Job 1 launched!\n");
-    fflush(stdout);
-
-    pthread_join(thr1, NULL);
-
-        
-    // [record event]
-    fprintf(f, "0,1,%d,end\n1,1,%d,end\n2,1,%d,end\n3,1,%d,end\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    sleep(4);
-
-    return 1;
-}
-
-
-int workload2_malleable(int argc, char* argv[]){
-
-    // [launch job 1]
-    size_t gpus = 4;
-    size_t *ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    ids[2] = 2;
-    ids[3] = 3;
-    schInfo.activeJobsControl[0].jobId = 0;
-    initJobControl(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-
-    // job arguments
-    size_t j0a = 50000000;
-    size_t j0b = 5;
-    size_t j0c = 500000;
-    size_t j0d = 100;
-    size_t j0e = 2;
-    size_t j0p1 = 0;
-    size_t j0p2 = 1;
-    size_t j0mall = 1;
-
-    void* j0args[9];
-    j0args[0] = &j0a;
-    j0args[1] = &j0b;
-    j0args[2] = &j0c;
-    j0args[3] = &j0d;
-    j0args[4] = &j0e;
-    j0args[5] = &j0p1;
-    j0args[6] = &j0p2;
-    j0args[7] = &j0mall;
-    j0args[8] = &(schInfo.activeJobsControl[0]);
-
-    // define job
-    jobLauncher_t job0;
-    job0.argc = 9;
-    job0.argv = j0args;
-    job0.launchFunc = &launch_phases_app;
-
-
-    // [record event]
-    fprintf(f, "0,0,%d,start\n1,0,%d,start\n2,0,%d,start\n3,0,%d,start\n", timer,timer,timer,timer);
-    fflush(f);
-    // [record event]
-
-    pthread_t thr0, thr1;
-    pthread_create(&thr0, NULL, runJob, (void*)(&job0));
-
-    
-    printf(" Job 0 launched!\n");
-    fflush(stdout);
-
-   
-    int counter = 0, done, signal;
-    while(checkJobFinished(&(schInfo.activeJobsControl[0])) == 0){
-
-        // check for signals
-        signal = checkSignalNoGPUs(&(schInfo.activeJobsControl[0]));
-
-        if(signal){
-
-            // reconfigure app
-            gpus = 0;
-            ids = NULL;
-            notifyReconfiguration(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-
-            // check if the job finished the reconfiguration
-            done = 0;
-            while(!done){
-                done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
-                sleep(0);
-            }
-
-            // GPUs deallocated for job 0
-            if(counter > 2){
-                // [record event]
-                fprintf(f, "0,0,%d,end\n1,0,%d,end\n2,0,%d,end\n", timer,timer,timer);
-                fflush(f);
-                // [record event]
-            }
-            else{
-                // [record event]
-                fprintf(f, "0,0,%d,end\n1,0,%d,end\n2,0,%d,end\n3,0,%d,end\n", timer,timer,timer,timer);
-                fflush(f);
-                // [record event]
-            }
-
-
-            if(counter == 2){
-                
-                sleep(1);
-
-                // [launch job 1]
-                gpus = 4;
-                ids = (size_t*)calloc(gpus, sizeof(size_t));
-                ids[0] = 0;
-                ids[1] = 1;
-                ids[2] = 2;
-                ids[3] = 3;
-
-                schInfo.activeJobsControl[1].jobId = 1;
-                initJobControl(&(schInfo.activeJobsControl[1]), gpus, ids);
-
-
-                // job arguments
-                size_t j1a = 10000000;
-                size_t j1b = 100;
-                size_t j1c = 500000;
-                size_t j1mall = 1;
-
-                void* j1args[4];
-                j1args[0] = &j1a;
-                j1args[1] = &j1b;
-                j1args[2] = &j1c;
-                j0args[3] = &j1mall;
-                j1args[4] = &(schInfo.activeJobsControl[1]);
-
-                // define job
-                jobLauncher_t job1;
-                job1.argc = 5;
-                job1.argv = j1args;
-                job1.launchFunc = &launch_iterative_app;
-
-                // GPUs allocated for job 1
-                // [record event]
-                fprintf(f, "0,1,%d,start\n1,1,%d,start\n2,1,%d,start\n3,1,%d,start\n", timer,timer,timer,timer);
-                fflush(f);
-                // [record event]
-
-                pthread_create(&thr1, NULL, runJob, (void*)(&job1));
-
-                printf(" Job 1 launched!\n");
-                fflush(stdout);
-            }
-            if(counter > 2){
-
-                gpus = 4;
-                ids = (size_t*)calloc(gpus, sizeof(size_t));
-                ids[0] = 0;
-                ids[1] = 1;
-                ids[2] = 2;
-                ids[3] = 3;
-                
-
-                // [record event]
-                fprintf(f, "0,1,%d,start\n1,1,%d,start\n2,1,%d,start\n", timer,timer,timer);
-                fflush(f);
-                // [record event]
-
-
-                notifyReconfiguration(&(schInfo.activeJobsControl[1]), gpus, ids);
-
-                // check if the job finished the reconfiguration
-                int done = 0;
-                while(done == 0){
-                    done = !checkReconfigurationDone(&(schInfo.activeJobsControl[1]));
-                    sleep(0.1);
-                }
-            }
-        }
-
-        signal = checkSignalReqGPUs(&(schInfo.activeJobsControl[0]));
-
-        if(signal){
-
-            if(counter >= 2){
-
-                // Job 1 deallocates resources
-                // [record event]
-                fprintf(f, "0,1,%d,end\n1,1,%d,end\n2,1,%d,end\n", timer,timer,timer);
-                fflush(f);
-                // [record event]
-
-                gpus = 1;
-                ids = (size_t*)calloc(gpus, sizeof(size_t));
-                ids[0] = 3;
-                
-                notifyReconfiguration(&(schInfo.activeJobsControl[1]), gpus, ids);
-                
-                // check if the job finished the reconfiguration
-                int done = 0;
-                while(done == 0){
-                    done = !checkReconfigurationDone(&(schInfo.activeJobsControl[1]));
-                    sleep(0.1);
-                }
-            }
-
-
-            // reconfigure app 0
-            if(counter >= 2){
-                gpus = 3;
-                ids = (size_t*)calloc(gpus, sizeof(size_t));
-                ids[0] = 0;
-                ids[1] = 1;
-                ids[2] = 2;
-
-                // [record event]
-                fprintf(f, "0,0,%d,start\n1,0,%d,start\n2,0,%d,start\n", timer,timer,timer);
-                fflush(f);
-                // [record event]
-            }
-            else{
-                gpus = 4;
-                ids = (size_t*)calloc(gpus, sizeof(size_t));
-                ids[0] = 0;
-                ids[1] = 1;
-                ids[2] = 2;
-                ids[3] = 3;
-
-                // [record event]
-                fprintf(f, "0,0,%d,start\n1,0,%d,start\n2,0,%d,start\n3,0,%d,start\n", timer,timer,timer,timer);
-                fflush(f);
-                // [record event]
-            }
-
-            notifyReconfiguration(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-            // check if the job finished the reconfiguration
-            int done = 0;
-            while(done == 0){
-                done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
-                sleep(0.1);
-            }
-
-            counter ++;
-        }
-
-        sleep(0.1);
-    }
-
-    pthread_join(thr0, NULL);
-
-    // [record event]
-    fprintf(f, "0,0,%d,end\n1,0,%d,end\n2,0,%d,end\n", timer,timer,timer);
-    fflush(f);
-    // [record event]
-    
-
-    gpus = 4;
-    ids = (size_t*)calloc(gpus, sizeof(size_t));
-    ids[0] = 0;
-    ids[1] = 1;
-    ids[2] = 2;
-    ids[3] = 3;
-
-    fprintf(f, "0,1,%d,start\n1,1,%d,start\n2,1,%d,start\n", timer,timer,timer);
-    fflush(f);
-
-
-    notifyReconfiguration(&(schInfo.activeJobsControl[1]), gpus, ids);
-
-    pthread_join(thr1, NULL);
-
-    fprintf(f, "0,1,%d,end\n1,1,%d,end\n2,1,%d,end\n3,1,%d,end\n", timer,timer,timer,timer);
-    fflush(f);
-
-    sleep(5);
-
-    return 1;
-}
-
-
-int reconfs_workload(int argc, char* argv[]){
-
-    // [initialize scheduler]
-
-    // allocate memory to store cuda data
-    int nGPUs;
-    cudaGetDeviceCount(&nGPUs); // get number of available devices
-    
-    // initialize "scheduler" resource availability
-    schInfo_t schInfo;
-    schInfo.nGPUs = (size_t)nGPUs;
-    schInfo.avGPUs = (char*)calloc(schInfo.nGPUs, sizeof(char));
-
-    // initialize scheduler jobs control information
-    schInfo.nJobs = 0;
-    schInfo.nMaxJobs = 100;
-    schInfo.lastJob = 0;
-    schInfo.jobThreads = (pthread_t*)calloc(schInfo.nMaxJobs, sizeof(pthread_t));
-    schInfo.activeJobsControl = (jobControl_t*)calloc(schInfo.nMaxJobs, sizeof(jobControl_t));
-    schInfo.maskActiveJobs = (char*)calloc(schInfo.nMaxJobs, sizeof(char));
-
-    schInfo.nPendingJobs = 0;
-    schInfo.nMaxPendingJobs = 100;
-    schInfo.pendingJobsControl = (jobControl_t*)calloc(schInfo.nMaxPendingJobs, sizeof(jobControl_t));
-    schInfo.maskPendingJobs = (char*)calloc(schInfo.nMaxPendingJobs, sizeof(char));
-
-    printf(" Scheduler initialized!\n");
-    fflush(stdout);
-
-    pthread_t thr;
-    jobLauncher_t job;
-
-
-    size_t maxBytes = 10000000000; // 10.000.000.000 --> 10GB 
-
-    for(size_t nBytes = 1; nBytes < maxBytes; nBytes *= 10){
-        
-        for(size_t gpus = 1; gpus <= nGPUs; gpus++){
-
-            size_t *ids = (size_t*)calloc(gpus, sizeof(size_t));
-            for(size_t i = 0; i<gpus; i++){
-                ids[i] = i;
-            }
-
-            // notify reconfiguration and measure time
-            // check if the job finished the reconfiguration
-            for(size_t recGPUs = 1; recGPUs <= nGPUs; recGPUs++){
-                
-                // [launch job 1]    
-                schInfo.activeJobsControl[0].jobId = 0;
-                initJobControl(&(schInfo.activeJobsControl[0]), gpus, ids);
-
-                // job arguments
-                size_t ja = nBytes;
-                size_t jb = 1;
-                size_t jc = 1;
-                size_t jmall = 1;
-                void* jargs[5];
-                jargs[0] = &ja;
-                jargs[1] = &jb;
-                jargs[2] = &jc;
-                jargs[3] = &jmall;
-                jargs[4] = &(schInfo.activeJobsControl[0]);
-
-                // define job
-                jobLauncher_t job;
-                job.argc = 5;
-                job.argv = jargs;
-                job.launchFunc = &launch_reconf_test_app;
-
-                pthread_create(&thr, NULL, runJob, (void*)(&job));
-
-                printf(" Job nBytes = %zu, nGPUs = %u launched!\n",nBytes,nGPUs);
-                fflush(stdout);
-
-
-
-                size_t *recGPUids = (size_t*)malloc(recGPUs * sizeof(size_t));
-                for(size_t j = 0; j<recGPUs; j++){
-                    recGPUids[j] = j;
-                }
-
-                notifyReconfiguration(&(schInfo.activeJobsControl[0]), recGPUs, recGPUids);
-
-                int done = 0;
-                while(done == 0){
-                    done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
-                    sleep(0.1);
-                }
-
-
-                pthread_join(thr, NULL);
-
-                free(recGPUids);
-            }
-
-            free(ids);
-        }
-    }
-
-    sleep(5);
-
-    return 1;
-}*/
-
-
-void* timeCounter(void *finished){
+void* resourceMonitoring(void *finished){
  
     int *finish = (int*)finished;
 
-    FILE *f = fopen("gpu_log.csv", "w");
-    if (!f) {
+    /*FILE *fUsage = fopen("gpu_log.csv", "w");
+    if (!fUsage) {
         perror("fopen");
         exit(1);
-    }
+    }*/
 
-    fprintf(f, "time_step,gpu_id,utilization_%%,power_W\n");
-    fflush(f);
+    fprintf(fUsage, "time_step,gpu_id,utilization_%%,power_W\n");
+    fflush(fUsage);
 
     // Initialize NVML
     nvmlReturn_t result = nvmlInit();
@@ -1409,10 +587,20 @@ void* timeCounter(void *finished){
     unsigned int device_count;
     nvmlDeviceGetCount(&device_count);
 
+
+    // [MONITOR INITIALIZATION]
+    int next_monitor_step = 0;
+    schInfo->gpuUtilization = (unsigned int (*)[MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuUtilization));
+    schInfo->gpuPower = (double (*)[MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuPower));
+
+
     while((*finish) == 0){
 
         usleep(INTERVAL_US); // 1 seconds
         timer += 1; // update timer
+
+        size_t tmpUsageGPUs = 0;
+        int workingGPUs = 0;
 
         // store info obtained from nvidia-smi
         for (unsigned int i = 0; i < device_count; i++) {
@@ -1428,13 +616,38 @@ void* timeCounter(void *finished){
             unsigned int power;
             nvmlDeviceGetPowerUsage(device, &power);
 
-            fprintf(f, "%d,%u,%u,%.2f\n", timer, i, util.gpu, power / 1000.0);
+            fprintf(fUsage, "%d,%u,%u,%.2f\n", timer, i, util.gpu, power / 1000.0);
+
+
+            // store utilization in sch info and update step
+            schInfo->gpuUtilization[i][0] = util.gpu;
+            schInfo->gpuPower[i][0] = power / 1000.0;
+
+            // if gpu is being utilized, compute current mean usage
+            if(util.gpu > 0){
+            
+                tmpUsageGPUs += util.gpu; 
+                workingGPUs ++;
+            }
+
+
+            // energy consumption
+            usagePower += schInfo->gpuPower[i][0];
         }
-        fflush(f);  // ensure data is written
+
+        // update mean value
+        if(workingGPUs > 0){
+            tmpUsageGPUs /= workingGPUs;
+            usageGPUs += tmpUsageGPUs;
+            registeredUsages ++;
+        }
+
+        fflush(fUsage);  // ensure data is written
     }
 
+    // 
     nvmlShutdown();
-    fclose(f);
+    fclose(fUsage);
 
     return NULL;
 }
@@ -1457,18 +670,19 @@ void* jobManager(void *voidJobsTimeline){
         while(timer <= jobLauncher->launchTimeStep){
 
             usleep(INTERVAL_US); // 0.5 second?
-            printf(" -- Job managet in job %zu, time step %d (%zu)\n", job, timer, jobLauncher->launchTimeStep);
+            //printf(" -- Job managet in job %zu, time step %d (%zu)\n", job, timer, jobLauncher->launchTimeStep);
         }
 
         // add job to the pending queue
         addPendingJob(jobLauncher);
-        printf(" -- Job added to pending queue at time step %d\n",timer);
+        printf(" -- [RMS] Job added to pending queue at time step %d\n",timer);
 
         job ++;
     }
 
     return NULL;
 }
+
 
 
 int main(int argc, char* argv[]){
@@ -1496,6 +710,8 @@ int main(int argc, char* argv[]){
     for(size_t gpu = 0; gpu < (size_t)nGPUs; gpu++){
         schInfo->avGPUs[gpu] = 1; // available
     }
+    //schInfo->gpuJob = (unsigned int*)calloc(schInfo->nGPUs, sizeof(unsigned int)); 
+
 
     // init queues
     initQueue(&(schInfo->pendingJobs));
@@ -1505,31 +721,53 @@ int main(int argc, char* argv[]){
 
 
     // initialize scheduler jobs control information
-    printf(" -- RMS initialized!\n");
+    printf(" -- [RMS] Initialized!\n");
     fflush(stdout);
 
     // loads jobs timeline (jobs information and when they are launched)
     jobsTimeline_t *jobsTimeline = loadJobsFromFile(argv[2]);
-    printf(" -- Jobs loaded!\n");
+    printf(" -- [RMS] Jobs loaded!\n");
     fflush(stdout);
+
+
+    // files to store results
+    char *recordFileName = argv[3];
+    char *gpuUsageFileName = argv[4];
+    char *resultsFileName = argv[5];
 
 
     // [TIMER AND RESOURCE MONITOR]
     // File for recording events: jobs pending, jobs running, reconfigurations...
-    f = fopen("eventRecord.csv", "w");
-    if (f == NULL) {
+    //f = fopen("eventRecord.csv", "w");
+    fEventRecord = fopen(recordFileName, "w");
+    if (fEventRecord == NULL) {
         perror("fopen\n");
         printf(" -- Error opening the file\n");
         return -1;  // or handle error appropriately
     }
 
-    fprintf(f, "GPU,Job,time,event\n");
-    fflush(f);
-    printf(" -- File for recording events opened!\n");
+    fUsage = fopen(gpuUsageFileName, "w");
+    if (fUsage == NULL) {
+        perror("fopen\n");
+        printf(" -- Error opening the file\n");
+        return -1;  // or handle error appropriately
+    }
+
+    fOutput = fopen(resultsFileName, "w");
+    if (fUsage == NULL) {
+        perror("fopen\n");
+        printf(" -- Error opening the file\n");
+        return -1;  // or handle error appropriately
+    }
+
+
+    fprintf(fEventRecord, "GPU,Job,time,event\n");
+    fflush(fEventRecord);
+    printf(" -- [RMS] Files opened!\n");
     fflush(stdout);
 
     // thread for counting time
-    pthread_create(&thrTime, NULL, timeCounter, (void*)(&finished)); // thread for updating timer
+    pthread_create(&thrTime, NULL, resourceMonitoring, (void*)(&finished)); // thread for updating timer
     pthread_create(&thrJobs, NULL, jobManager, (void*)(jobsTimeline)); // thread for simulating jobs launching to the system
 
 
@@ -1544,19 +782,28 @@ int main(int argc, char* argv[]){
     jobQueue_t *runningQueue = &(schInfo->runningJobs);
     jobQueue_t *finishedQueue = &(schInfo->finishedJobs);
     jobQueue_t *reconfiguringQueue = &(schInfo->reconfiguringJobs);
+
     job_t *job; 
     jobLauncher_t *jobLauncher;
     jobControl_t *jobControl;
 
     // initialize structure for job resources
     jobResources_t *jobResources;
+    jobMonitoring_t *jobMonitor;
 
 
     // [SCHEDULING LOOP]
-    printf(" -- Entering the scheduling loop\n");
+    printf(" -- [RMS] Entering the scheduling loop (%zu jobs for completion)\n", jobsTimeline->nJobs);
     fflush(stdout);
 
     nJobsFinished = 0; // loop until all jobs are finished
+
+
+
+    struct timespec startTimer, endTimer;
+    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
+
+
 
     // loop until all jobs finish their execution
     while(nJobsFinished < jobsTimeline->nJobs){
@@ -1570,17 +817,41 @@ int main(int argc, char* argv[]){
         nFinishedJobs = getNumberOfJobsInQueue(&(schInfo->finishedJobs));
         nReconfiguringJobs = getNumberOfJobsInQueue(&(schInfo->reconfiguringJobs));
 
-        //if(timer % 5 == 0){
-            printf(" -- Scheduling:\n ---- Pending jobs = %zu\n ---- Running jobs = %zu\n ---- Finished jobs = %zu\n ---- Reconfiguring jobs = %zu\n", 
-                nPendingJobs, nRunningJobs, nFinishedJobs, nReconfiguringJobs);
+        if(timer % 5 == 0){
+            printf(" -- [RMS] State:\n ---- Pending jobs = %zu\n ---- Running jobs = %zu\n ---- Finished jobs = %zu\n ---- Reconfiguring jobs = %zu\n ---- Free gpus = %zu (", 
+                nPendingJobs, nRunningJobs, nFinishedJobs, nReconfiguringJobs, schInfo->nAvGPUs);
+            
+            for(size_t gpu = 0; gpu<schInfo->nGPUs; gpu ++){
+
+                if(schInfo->avGPUs[gpu]){
+                    printf(" %zu", gpu);
+                }
+            }
+
+            printf(")\n");
+
+            for(iJob = 0; iJob < nRunningJobs; iJob++){
+
+                job = getJobFromQueue(runningQueue, iJob);
+
+                printf(" ---- ---- Job %zu is using %zu GPUs: (", job->jobId, job->jobControl->jobResources->nGPUs);
+
+                for(size_t gpu = 0; gpu<job->jobControl->jobResources->nGPUs; gpu++){
+
+                    printf(" %zu", job->jobControl->jobResources->idGPUs[gpu]);
+                }
+                printf(")\n");
+            }
+
             fflush(stdout);
-        //}
+        }
 
         // [SCHEDULING ALGORITHM]: scheduling, reconfigurations...
 
         // loop over pending jobs and check whether any job can be launched
+        nPendingJobs = getNumberOfJobsInQueue(&(schInfo->pendingJobs));
         for(iJob = 0; iJob<nPendingJobs; iJob++){
-        
+
             // get job
             job = getJobFromQueue(pendingQueue, iJob);
             
@@ -1597,6 +868,9 @@ int main(int argc, char* argv[]){
                 nReqMinGPUs = jobLauncher->nReqMinGPUs;
             }
 
+
+            // [SCHEDULING POLICY] : launch, if possible, using all the GPUs the job wants
+
             // launch using the maximum number of GPUs possible
             nLaunchGPUs = 0;
             if(schInfo->nAvGPUs >= nReqGPUs){
@@ -1612,37 +886,53 @@ int main(int argc, char* argv[]){
 
                 // job resources for the job
                 jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
-
-                // store number of GPUs for the job
                 jobResources->nGPUs = nLaunchGPUs;
-
-                // allocate memory for GPU ids
                 jobResources->idGPUs = (size_t*)malloc(nLaunchGPUs * sizeof(size_t));
                 
-                // find available GPUs and update system state
+
+                // find available GPUs and update system state // [THIS IS A POLICY TOO]
                 size_t gpuId = 0;
                 size_t jobGPU = 0;
+                
                 while(jobGPU < nLaunchGPUs){
 
-                    if(schInfo->avGPUs[gpuId]){
+                    // allocate the gpu for the job
+                    if(schInfo->avGPUs[gpuId] == 1){
                         
-                        jobResources->idGPUs[jobGPU] = gpuId; // allocate for the job
-                        schInfo->avGPUs[gpuId] = 0; // no available
+                        // set the GPU id
+                        jobResources->idGPUs[jobGPU] = gpuId; 
+
+                        // update index
                         jobGPU ++;
                     }
 
                     gpuId ++;
                 }
 
-                schInfo->nAvGPUs -= jobResources->nGPUs;
+                // allocate resources
+                allocateResources(schInfo, jobResources);
 
+                
                 // [LAUNCH JOB]
-                printf(" -- Launching job %zu with %zu GPUs\n", iJob, nLaunchGPUs);
                 launchJob(job, iJob, jobResources);
-                printf(" -- Job %zu launched!\n", iJob);
+
+                printf(" -- [RMS] Launching job %zu (id %zu) with %zu GPUs (", iJob, job->jobId, nLaunchGPUs);
+                
+                for(size_t g = 0; g<job->jobControl->jobResources->nGPUs; g++){
+                    printf(" %zu", job->jobControl->jobResources->idGPUs[g]);
+                }
+
+                printf(")\n");
+                fflush(stdout);
+
+                // update number of pending jobs
+                nPendingJobs--;
+                iJob--;
             }
         }
 
+        // loop over jobs that are being reconfigured and check if they finished
+        nReconfiguringJobs = getNumberOfJobsInQueue(&(schInfo->reconfiguringJobs)); 
         for(iJob = 0; iJob<nReconfiguringJobs; iJob ++){
             
             job = getJobFromQueue(reconfiguringQueue, iJob);
@@ -1650,45 +940,76 @@ int main(int argc, char* argv[]){
             // check whether it finished the reconfiguration
             char reconfigurationDone = checkReconfigurationDone(job->jobControl);
 
-            if(reconfigurationDone){
+            if(reconfigurationDone == 0){
 
+                // get job control
+                jobControl = job->jobControl;
+
+                // finish job
                 jobFinishedReconfiguration(job, iJob);
+             
+
+                // deallocate old resources
+                jobResources_t *oldJobResources = (jobResources_t*)calloc(1,sizeof(jobResources_t));
+                oldJobResources->nGPUs = jobControl->prevJobResources->nGPUs - jobControl->jobResources->nGPUs;
+                oldJobResources->idGPUs = (size_t*)malloc(oldJobResources->nGPUs * sizeof(size_t));
+
+                // find the GPUs to be deallocaated
+                // TODO (I need to test this)
+                int next = 0;
+                for(size_t i = 0; i<jobControl->prevJobResources->nGPUs; i++){
+                    
+                    int founded = 0;
+                    for(size_t j = 0; j<jobControl->jobResources->nGPUs; j++){
+
+                        if(jobControl->prevJobResources->idGPUs[i] == jobControl->jobResources->idGPUs[j]){
+
+                            founded = 1;
+                        }
+                    }
+
+                    if(!founded){
+
+                        oldJobResources->idGPUs[next] = jobControl->prevJobResources->idGPUs[i];
+                        next++;
+                    }
+                }
+
+                // deallocate resources
+                deallocateResources(schInfo, oldJobResources);
+
+
+                // update flow values if job finished reconfiguring
+                nReconfiguringJobs --;
+                iJob --;
             }
         }
 
         // manage reconfigurations for running jobs
+        nRunningJobs = getNumberOfJobsInQueue(&(schInfo->runningJobs));
         for(iJob = 0; iJob<nRunningJobs; iJob++){
 
             // get GPUs needed by job
             job = getJobFromQueue(runningQueue, iJob);
             jobLauncher = job->jobLauncher;
+            jobResources = job->jobControl->jobResources;
+            jobType = jobLauncher->jobType;
 
             // check whether the job finished
             char jobFinished = checkJobFinished(job->jobControl);
 
-            // if job finished, end thread
+            // check if job finished
             if(jobFinished){
             
                 // finish job
                 finishJob(job, iJob);
 
-
-                // [TODO: refactorize to a function]
-
                 // deallocate resources
-                jobResources = job->jobControl->jobResources;
+                deallocateResources(schInfo, jobResources);
 
-                schInfo->nAvGPUs += jobResources->nGPUs;
-                
-                // find available GPUs
-                size_t jobGPU = 0;
-                for(size_t gpuId = 0; gpuId<jobResources->nGPUs; gpuId++){
-                        
-                    schInfo->avGPUs[jobResources->idGPUs[gpuId]] = 1; // GPU is avalaible again
-                }
-
-                // free job resources
-                free(jobResources->idGPUs);
+                 
+                // free job resources (should be a function?) [TODO]
+                /*free(jobResources->idGPUs);
                 free(jobResources);
                 free(jobControl->prevJobResources->idGPUs);
                 free(jobControl->prevJobResources);
@@ -1696,31 +1017,166 @@ int main(int argc, char* argv[]){
                 free(job->jobControl);
 
                 free(job->jobLauncher->argv);
-                free(job->jobLauncher);
+                free(job->jobLauncher);*/
                 
                 // [TODO]: free job pointers (jobControl, job, jobLauncher...)
 
-                printf(" -- Job %zu finished\n", iJob);
+                printf(" -- [RMS] Job %zu finished\n", job->jobId);
                 fflush(stdout);
+
+
+                nJobsFinished ++;
+                nRunningJobs --;
+                iJob--;
             }
 
+            // if job not finished and job is malleable (malleable or flexible), check for reconfigurations
+            else if (jobType > 1){
+
+                // update GPU usage
+                jobMonitor = job->jobMonitor;  
+                for(size_t jobGPU = 0; jobGPU < job->jobControl->jobResources->nGPUs; jobGPU++){
+
+                    jobMonitor->gpuUsage[jobGPU] += schInfo->gpuUtilization[job->jobControl->jobResources->idGPUs[jobGPU]][0];
+                }
+                jobMonitor->step ++;
+
+
+                // [ RECONFIGURATION POLICY ]
+                if(jobMonitor->step > 10){ // wait 5 seconds before taking decisions about what to do
+
+                    // get mean usage of the GPUs
+                    double meanUsage = 0.0;
+                    for(size_t jobGPU = 0; jobGPU < job->jobControl->jobResources->nGPUs; jobGPU++){
+
+                        meanUsage += jobMonitor->gpuUsage[jobGPU]; 
+                    }  
+                    meanUsage /= (jobMonitor->step * job->jobControl->jobResources->nGPUs);
+
+
+                    // take decisions depending on the mean usage
+
+                    if(jobResources->nGPUs > 1 && (meanUsage < 70.0)){ // shrink
+                                        
+                        // new job resources
+                        jobResources_t *reconfJobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+
+                        reconfJobResources->nGPUs = jobResources->nGPUs / 2;
+                        reconfJobResources->idGPUs = (size_t*)calloc(reconfJobResources->nGPUs, sizeof(size_t));
+
+                        // set old GPUs as new ones for this job
+                        for(size_t i = 0; i<reconfJobResources->nGPUs; i++){
+
+                            reconfJobResources->idGPUs[i] = jobResources->idGPUs[i];
+                        }
+
+                        // allocate new resources and deallocate WHEN reconfiguration is FINISHED
+                        // do not call allocate, since the resources are the same as the previous ones
+                        //allocateResources(schInfo, reconfJobResources);
+
+                        scheduleReconfiguration(job, iJob, reconfJobResources);
+                    
+                
+                        printf(" -- [RMS] Mean GPU usage of job %zu is %lf, so it will be shrinked (from %zu to %zu)\n", 
+                            job->jobId, meanUsage, jobResources->nGPUs, reconfJobResources->nGPUs);
+                    }
+                    else if(meanUsage > 90.0){ // expand
+
+
+                        // if nGPUs % 2 == 0, nGPUs * 2, else, + 1 (module of 2?)
+                        /*jobResources_t *reconfJobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+                        
+                        reconfJobResources->nGPUs = jobResources->nGPUs * 2;
+
+                        reconfJobResources->idGPUs = (size_t*)calloc(reconfJobResources->nGPUs, sizeof(size_t));
+
+                        for(size_t i = 0; i<jobResources->nGPUs; i++){
+
+                            reconfJobResources->idGPUs[i] = jobResources->idGPUs[i]; 
+                        }
+
+                        // find available GPUs
+                        size_t gpuId = 0;
+                        size_t jobGPU = jobResources->nGPUs;
+                        
+                        while(jobGPU < reconfJobResources->nGPUs){
+
+                            // allocate the gpu for the job
+                            if(schInfo->avGPUs[gpuId] == 1){
+                                
+                                // set the GPU id
+                                jobResources->idGPUs[jobGPU] = gpuId; 
+
+                                // update index
+                                jobGPU ++;
+                            }
+
+                            gpuId ++;
+                        }*/
+
+                        //printf(" -- Mean GPU usage of job %zu is %lf, so it will be expanded\n", job->jobId, meanUsage);
+                    }
+
+
+                    // reinitialize monitor (steps and GPU usage) : [TODO]: refactorize to a function?
+                    jobMonitor->step = 0; 
+                    for(size_t jobGPU = 0; jobGPU < job->jobControl->jobResources->nGPUs; jobGPU++){
+
+                        jobMonitor->gpuUsage[jobGPU] = 0;
+                    }
+                }
+            }
+
+
             // reconfiguration policy
-            printf(" -- No reconfiguration policy yet\n");
+            //printf(" -- No reconfiguration policy yet\n");
+
+            // For each reconfiguration
+            // - Reconfigure application
+            // - set new resource availability
+            // - update monitoring...
+            // All this should be done in a function for modularity
         }
     }
 
-
-    // [workloads]
-    //workload1(argc, argv);
-    //workload1_malleable(argc, argv);
-
-    //workload2(argc, argv);
-    //workload2_malleable(argc, argv);
-
-    //reconfs_workload(argc, argv);
-
     // inform monitor that execution ended
     finished = 1;
+
+
+    /* comptue statistics */
+    // -- Mean wait time
+    // -- Mean execution time
+    // -- Mean total time
+
+    double meanWait = 0.0, meanRun = 0.0, meanTotal = 0.0;
+    
+    nFinishedJobs = getNumberOfJobsInQueue(&(schInfo->finishedJobs));
+    for(iJob = 0; iJob < nFinishedJobs; iJob ++){
+
+        // get job
+        job = getJobFromQueue(finishedQueue, iJob);
+
+        meanWait += (job->jobEndPending.tv_sec - job->jobStartPending.tv_sec) + (job->jobEndPending.tv_nsec - job->jobStartPending.tv_nsec) / 1e9;
+        meanRun += (job->jobEndRunning.tv_sec - job->jobStartRunning.tv_sec) + (job->jobEndRunning.tv_nsec - job->jobStartRunning.tv_nsec) / 1e9;
+    }
+
+    meanTotal = (meanWait + meanRun) / nFinishedJobs;
+    meanWait = meanWait / nFinishedJobs;
+    meanRun = meanRun / nFinishedJobs;
+
+
+    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
+    double totalTime = (endTimer.tv_sec - startTimer.tv_sec) + (endTimer.tv_nsec - startTimer.tv_nsec) / 1e9;
+
+
+
+    printf(" -- [RMS] Mean total time = %lf, mean total wait time = %lf, mean total run time = %lf\n", meanTotal, meanWait, meanRun);
+
+
+    // mean usage of active GPUs and energy consumption or something like that?
+    fprintf(fOutput, "%zu %lf %lf %lf %lf %lf %lf %d\n", 
+            jobsTimeline->nJobs, totalTime, meanTotal, meanWait, meanRun, (double)((double)usageGPUs / (double)registeredUsages), usagePower, timer);
+    fflush(fOutput);
 }
 
 

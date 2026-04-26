@@ -4,7 +4,7 @@
 #include "toy_app_malleable.hpp"
 
 
-__global__ void simulateKernel(float* arr, int N, int K){
+__global__ void simulateKernel(float* arr, size_t N, size_t K){
 
     size_t threadId = 
         ((size_t)blockIdx.x  + (size_t)gridDim.x  * (size_t)blockIdx.y + (size_t)gridDim.x * (size_t)gridDim.y * (size_t)blockIdx.z) *
@@ -16,7 +16,7 @@ __global__ void simulateKernel(float* arr, int N, int K){
         float val = arr[threadId];
         float v0 = val, v1 = val, v2 = val, v3 = val;
 
-        for (int k = 0; k < K; k++) {
+        for (size_t k = 0; k < K; k++) {
             v0 = v0 * 1.000001f + 0.000001f;
             v1 = v1 * 1.000001f + 0.000001f;
             v2 = v2 * 1.000001f + 0.000001f;
@@ -30,10 +30,10 @@ __global__ void simulateKernel(float* arr, int N, int K){
 }
 
 
-void runKernel(float* arr, int N, int K){
+void runKernel(float* arr, size_t N, size_t K){
 
-    int threads = 512;
-    int blocks = (N + threads - 1) / threads;
+    size_t threads = 512;
+    size_t blocks = (N + threads - 1) / threads;
 
     simulateKernel<<<blocks, threads>>>(arr, N, K);
     cudaDeviceSynchronize();

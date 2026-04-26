@@ -27,7 +27,7 @@ typedef struct state_t {
 enum transmissionPatternsEnum {
     
     nonettp,
-    all,
+    entire,
     simple,
     complex,
     custom
