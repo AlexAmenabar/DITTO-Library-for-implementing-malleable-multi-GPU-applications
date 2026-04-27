@@ -107,7 +107,7 @@ void configureEntireTransmission(DTI_t *DTI, size_t nGPUs){
     for(i = 0; i<nGPUs; i++){
         
         DTI->nPerGPU[i] = N; // the entire array is copied to all GPUs
-        DTI->nPerPartition[i][0] = N; // the entire array is copied to all GPUs
+        DTI->nPerPartition[i][0] = N; // the entire array is copied to all GPUs, so there is only one partition with all elements
         DTI->offsetPerPartition[i][0] = 0; // all start in 0 since the entire array is copied
     }
 }

@@ -241,8 +241,13 @@ void simulateIterativeCommunications(appStruct_t *data){
             cudaDeviceSynchronize();
         }
 
+        struct timespec startTimer, endTimer;
+
         // check if data should be synchronized
         if(t % data->nIterationsForCommunications == 0){
+
+            printf(" -- Starting communications...\n");
+            fflush(stdout);
 
             // copy data to the GPU 0
             int dstDev = 0, srcDev;
@@ -270,30 +275,43 @@ void simulateIterativeCommunications(appStruct_t *data){
                 // if can access, move data directly, else, use the CPU
                 if (canAccess) {
 
-                    printf(" -- P2P communications between GPUs from %d to %d enabled!\n", srcDev, dstDev);
+                    printf(" -- P2P communications between GPUs from %d to %d ENABLED!\n", srcDev, dstDev);
                     
+                    // start timer
+                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
+
                     // enable peer access
                     cudaDeviceEnablePeerAccess(dstDev, 0);
 
                     // cpy data directly
                     cudaMemcpyPeer(gpuArrs[srcDev-1], dstDev, dData[srcDev], srcDev, nPerGPU[srcDev]); // copy P2P
 
+                    // end timer
+                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
+
                     printf(" -- P2P communication finished\n");
                     fflush(stdout);
 
                 } else {
 
-                    printf(" -- P2P communications between GPUs from %d to %d not enabled!\n", srcDev, dstDev);
+                    printf(" -- P2P communications between GPUs from %d to %d NOT ENABLED!\n", srcDev, dstDev);
 
                     // cpy data through the CPU
                     // 1. allocate memory in the CPU
                     float * tmpCPU = (float*)malloc(nPerGPU[srcDev] * sizeof(float));
+
+
+                    // start timer
+                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
 
                     // copy to the CPU
                     err = cudaMemcpy(tmpCPU, dData[srcDev], nPerGPU[srcDev], cudaMemcpyDeviceToHost); 
 
                     // copy to the GPU
                     err = cudaMemcpy(gpuArrs[srcDev-1], tmpCPU, nPerGPU[srcDev], cudaMemcpyHostToDevice); 
+
+                    // end timer
+                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
 
                     // dellocate temporal CPU memory
                     free(tmpCPU);
@@ -302,12 +320,17 @@ void simulateIterativeCommunications(appStruct_t *data){
                     fflush(stdout);
                 }
 
+                data->communicationTimeSrcDst += (endTimer.tv_sec - startTimer.tv_sec) + (endTimer.tv_nsec - startTimer.tv_nsec) / 1e9;
+
+
                 // sync devices
                 cudaDeviceSynchronize();
             }
             
             // do some computation?
 
+
+            // store time
 
             // now the 0 is the src
             srcDev = 0;
@@ -325,31 +348,44 @@ void simulateIterativeCommunications(appStruct_t *data){
                 // if can access, move data directly, else, use the CPU
                 if (canAccess) {
 
-                    printf(" -- P2P communications between GPUs from %d to %d enabled!\n", srcDev, dstDev);
+                    printf(" -- P2P communications between GPUs from %d to %d ENABLED!\n", srcDev, dstDev);
                     
                     // set current device
                     cudaSetDevice(srcDev); // 
+
+                    // start timer
+                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
+
                     cudaDeviceEnablePeerAccess(dstDev, 0); // enable peer access to destination device
 
                     // cpy data directly
                     cudaMemcpyPeer(dData[dstDev], dstDev, gpuArrs[dstDev-1], srcDev, nPerGPU[dstDev]); // copy P2P
+
+                    // end timer
+                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
 
                     printf(" -- P2P communication finished\n");
                     fflush(stdout);
 
                 } else {
 
-                    printf(" -- P2P communications between GPUs from %d to %d not enabled!\n", srcDev, dstDev);
+                    printf(" -- P2P communications between GPUs from %d to %d NOT ENABLED!\n", srcDev, dstDev);
 
                     // cpy data through the CPU
                     // 1. allocate memory in the CPU
                     float* tmpCPU = (float*)malloc(nPerGPU[dstDev] * sizeof(float));
+
+                    // start timer
+                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
 
                     // copy to the CPU
                     err = cudaMemcpy(tmpCPU, gpuArrs[dstDev-1], nPerGPU[dstDev], cudaMemcpyDeviceToHost); 
 
                     // copy to the GPU
                     err = cudaMemcpy(dData[dstDev], tmpCPU, nPerGPU[dstDev], cudaMemcpyHostToDevice); 
+
+                    // end timer
+                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
 
                     // dellocate temporal CPU memory
                     free(tmpCPU);
@@ -358,6 +394,9 @@ void simulateIterativeCommunications(appStruct_t *data){
                     fflush(stdout);
                 }
 
+                data->communicationTimeDstSrc += (endTimer.tv_sec - startTimer.tv_sec) + (endTimer.tv_nsec - startTimer.tv_nsec) / 1e9;
+
+
                 // sync devices
                 cudaDeviceSynchronize();
 
@@ -365,10 +404,15 @@ void simulateIterativeCommunications(appStruct_t *data){
                 cudaFree(gpuArrs[dstDev-1]);
             }
             
+
+
             // deallocate 
             free(gpuArrs);
         }
     }
+
+    data->communicationTimeSrcDst = (double)((double)data->communicationTimeSrcDst / (double)T);
+    data->communicationTimeDstSrc = (double)((double)data->communicationTimeDstSrc / (double)T);
 }
 
 
@@ -458,7 +502,7 @@ void launch_phases_app(int argc, void* argv[]){
         appData->arr[i] = (float)rand()/(float)(RAND_MAX);
 
     // Initialize DTIs for automatically managing CPU-GPU communications
-    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(size_t), "appData", initializeDTIDescription(simple, ordered));
+    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered));
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
@@ -490,6 +534,9 @@ void launch_communications_app(int argc, void* argv[]){
     initDITTO(argv[argc+1]);
 
     // APP: initialize data structure used by the application
+    printf(" -- [APP]: Loading argv\n");
+    fflush(stdout);
+
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
     appData->N = *(size_t*)argv[0];
     appData->T = *(size_t*)argv[1];
@@ -505,8 +552,7 @@ void launch_communications_app(int argc, void* argv[]){
         appData->arr[i] = (float)rand()/(float)(RAND_MAX);
 
     // Initialize DTIs for automatically managing CPU-GPU communications
-    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(size_t), "appData", initializeDTIDescription(entire, nonerme));
-
+    DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(entire, nonerme));
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
     configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
@@ -516,11 +562,15 @@ void launch_communications_app(int argc, void* argv[]){
 
     // program code (simulations)
     //printArr(appData);
+
     simulateIterativeCommunications(appData);
 
     // transfer data fron the GPUs to the CPU
     transferDataGPU2CPU();
+
     
+    printf(" Src-Dst = %lf, Dst-Src = %lf\n", appData->communicationTimeSrcDst, appData->communicationTimeDstSrc);
+
     // signal that job finished
     jobFinished(getJobControl());
 

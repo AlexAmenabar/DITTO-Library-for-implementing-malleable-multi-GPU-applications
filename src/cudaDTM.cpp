@@ -52,10 +52,14 @@ void cpyDataCPU2GPU(DTI_t *DTI){
     nPartitionsGPU = description->nPartitions;
 
     // accumulate partitions corresponding to the GPU contiguously
-    void *cData = (void*)calloc(DTI->N, size);
-    
-    nextIndex = 0;
+    void **cData = (void**)calloc(nGPUs, sizeof(void*));
+
     for(i = 0; i<nGPUs; i++){
+
+        // allocate memory for the number of elements necessary in the GPU i
+        cData[i] = (void*)calloc(DTI->nPerGPU[i], size);
+    
+        nextIndex = 0;
 
         // loop over partitions corresponding to the GPU and build the contiguous array
         for(j = 0; j<nPartitionsGPU; j++){
@@ -68,7 +72,7 @@ void cpyDataCPU2GPU(DTI_t *DTI){
                 
                 // copy the partition from the source to the destination
                 void *src = (char*)(DTI->cpuData) + offPartitionGPU * size;
-                void *dst = (char*)cData + nextIndex * size;
+                void *dst = (char*)(cData[i]) + nextIndex * size;
                 size_t nBytes = nPartitionGPU * size;
 
                 memcpy(dst, src, nBytes);
@@ -79,7 +83,6 @@ void cpyDataCPU2GPU(DTI_t *DTI){
     }
 
     // allocate memory and move data to the GPU
-    size_t firstElement = 0;
     for(i = 0; i<nGPUs; i++){
 
         // set device
@@ -92,11 +95,11 @@ void cpyDataCPU2GPU(DTI_t *DTI){
             printf("Job%zu: Allocation in GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getGPUIds()[i], cudaGetErrorString(err));
 
         // move data
-        err = cudaMemcpy(DTI->gpuData[i], (char*)cData + firstElement * size, DTI->nPerGPU[i] * size, cudaMemcpyHostToDevice); 	
+        err = cudaMemcpy(DTI->gpuData[i], (char*)cData[i], DTI->nPerGPU[i] * size, cudaMemcpyHostToDevice); 	
         if (err != cudaSuccess) 
             printf("Job%zu: Memcpy CPU2GPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getGPUIds()[i], cudaGetErrorString(err));
 
-        firstElement += DTI->nPerGPU[i];
+        free(cData[i]);
     }
 
     // deallocate termporal intermediate structure
@@ -118,22 +121,22 @@ void cpyDataGPU2CPU(DTI_t *DTI){
     DTIDesctiption_t *description = DTI->description;
 
     // intermediate array to recive data from the GPUs contiguously and then redistribute
-    void *cData = (void*)calloc(DTI->N, size);
+    void **cData = (void**)calloc(nGPUs, sizeof(void*));
 
     // allocate memory and move data to the GPU
-    size_t firstElement = 0;
     for(i = 0; i<nGPUs; i++){
 
         // set device
         setGPUDevice(i);
         cudaDeviceSynchronize();
 
+        // allocate memory for cData
+        cData[i] = (void*)calloc(DTI->nPerGPU[i], size);
+
         // move data from the GPU to the CPU
-        err = cudaMemcpy((char*)cData + firstElement * size, DTI->gpuData[i], DTI->nPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
+        err = cudaMemcpy((char*)cData[i], DTI->gpuData[i], DTI->nPerGPU[i] * size, cudaMemcpyDeviceToHost); 	
         if (err != cudaSuccess) 
             printf("Job%zu: Memcpy GPU2CPU failed in %zu (%zu):  %s\n", getJobControl()->jobId, i, getGPUIds()[i], cudaGetErrorString(err));
-
-        firstElement += DTI->nPerGPU[i];
 
         // deallocate memory
         err = cudaFree(DTI->gpuData[i]); 
@@ -144,11 +147,11 @@ void cpyDataGPU2CPU(DTI_t *DTI){
 
 
     nPartitionsGPU = description->nPartitions;
-    nextIndex = 0;
     for(i = 0; i<nGPUs; i++){
         
         // get the total number of elements to be transferred to the GPU
 
+        nextIndex = 0;
         // loop over partitions corresponding to the GPU and build the contiguous array
         for(j = 0; j<nPartitionsGPU; j++){
 
@@ -160,7 +163,7 @@ void cpyDataGPU2CPU(DTI_t *DTI){
             
                 // copy the partition from the source to the destination
                 void *dst = (char*)(DTI->cpuData) + offPartitionGPU * size;
-                void *src = (char*)cData + nextIndex * size;
+                void *src = (char*)cData[i] + nextIndex * size;
                 size_t nBytes = nPartitionGPU * size;
 
                 memcpy(dst, src, nBytes);
@@ -168,6 +171,9 @@ void cpyDataGPU2CPU(DTI_t *DTI){
                 nextIndex += nPartitionGPU;
             }
         }
+
+        free(cData[i]);
     }
+    free(cData);
     //printf("\n");
 }

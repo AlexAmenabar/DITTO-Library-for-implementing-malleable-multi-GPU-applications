@@ -18,6 +18,8 @@ typedef struct appStruct_t {
 
     // iterative application with phases and communication
     size_t nIterationsForCommunications; // number of iterations to be executed before each communication
+    double communicationTimeSrcDst = 0.0;
+    double communicationTimeDstSrc = 0.0;
 
     // whether the application is malleable or not (this decides if there are reconfigurations or not)
     size_t malleable; // 0 / 1

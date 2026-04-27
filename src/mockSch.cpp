@@ -153,6 +153,10 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
 
             jobLauncher->launchFunc = &launch_phases_app;
         }
+        else if(jobLauncher->appType == 2){
+            
+            jobLauncher->launchFunc = &launch_communications_app;
+        }
 
         // print job information
         /*printf(" -- Printing job %zu information\n", job);
@@ -212,8 +216,8 @@ void launchJob(job_t *job, size_t pendingIndex, jobResources_t *jobResources){
     job->jobMonitor = initJobMonitor(job->jobMonitor, jobResources);
 
     // wait (simulate launch time) (TODO: should be improved?)
-    int sleepTime = (int)rand() % 5;
-    sleep(sleepTime);
+    //int sleepTime = (int)rand() % 5;
+    //sleep(sleepTime);
 
     // launch job (thread)
     pthread_create(&(job->jobThread), NULL, runJob, (void*)(job->jobLauncher));
@@ -685,7 +689,333 @@ void* jobManager(void *voidJobsTimeline){
 
 
 
+
+/*int reconfs_workload(int argc, char* argv[]){
+
+    // [initialize scheduler]
+
+    // allocate memory to store cuda data
+    int nGPUs;
+    cudaGetDeviceCount(&nGPUs); // get number of available devices
+    
+    // initialize "scheduler" resource availability
+    schInfo_t schInfo;
+    schInfo.nGPUs = (size_t)nGPUs;
+    schInfo.avGPUs = (char*)calloc(schInfo.nGPUs, sizeof(char));
+
+    // initialize scheduler jobs control information
+    schInfo.nJobs = 0;
+    schInfo.nMaxJobs = 100;
+    schInfo.lastJob = 0;
+    schInfo.jobThreads = (pthread_t*)calloc(schInfo.nMaxJobs, sizeof(pthread_t));
+    schInfo.activeJobsControl = (jobControl_t*)calloc(schInfo.nMaxJobs, sizeof(jobControl_t));
+    schInfo.maskActiveJobs = (char*)calloc(schInfo.nMaxJobs, sizeof(char));
+
+    schInfo.nPendingJobs = 0;
+    schInfo.nMaxPendingJobs = 100;
+    schInfo.pendingJobsControl = (jobControl_t*)calloc(schInfo.nMaxPendingJobs, sizeof(jobControl_t));
+    schInfo.maskPendingJobs = (char*)calloc(schInfo.nMaxPendingJobs, sizeof(char));
+
+    printf(" Scheduler initialized!\n");
+    fflush(stdout);
+
+    pthread_t thr;
+    jobLauncher_t job;
+
+
+    size_t maxBytes = 10000000000; // 10.000.000.000 --> 10GB 
+
+    for(size_t nBytes = 1; nBytes < maxBytes; nBytes *= 10){
+        
+        for(size_t gpus = 1; gpus <= nGPUs; gpus++){
+
+            size_t *ids = (size_t*)calloc(gpus, sizeof(size_t));
+            for(size_t i = 0; i<gpus; i++){
+                ids[i] = i;
+            }
+
+            // notify reconfiguration and measure time
+            // check if the job finished the reconfiguration
+            for(size_t recGPUs = 1; recGPUs <= nGPUs; recGPUs++){
+                
+                // [launch job 1]    
+                schInfo.activeJobsControl[0].jobId = 0;
+                initJobControl(&(schInfo.activeJobsControl[0]), gpus, ids);
+
+                // job arguments
+                size_t ja = nBytes;
+                size_t jb = 1;
+                size_t jc = 1;
+                size_t jmall = 1;
+                void* jargs[5];
+                jargs[0] = &ja;
+                jargs[1] = &jb;
+                jargs[2] = &jc;
+                jargs[3] = &jmall;
+                jargs[4] = &(schInfo.activeJobsControl[0]);
+
+                // define job
+                jobLauncher_t job;
+                job.argc = 5;
+                job.argv = jargs;
+                job.launchFunc = &launch_reconf_test_app;
+
+                pthread_create(&thr, NULL, runJob, (void*)(&job));
+
+                printf(" Job nBytes = %zu, nGPUs = %u launched!\n",nBytes,nGPUs);
+                fflush(stdout);
+
+
+
+                size_t *recGPUids = (size_t*)malloc(recGPUs * sizeof(size_t));
+                for(size_t j = 0; j<recGPUs; j++){
+                    recGPUids[j] = j;
+                }
+
+                notifyReconfiguration(&(schInfo.activeJobsControl[0]), recGPUs, recGPUids);
+
+                int done = 0;
+                while(done == 0){
+                    done = !checkReconfigurationDone(&(schInfo.activeJobsControl[0]));
+                    sleep(0.1);
+                }
+
+
+                pthread_join(thr, NULL);
+
+                free(recGPUids);
+            }
+
+            free(ids);
+        }
+    }
+
+    sleep(5);
+
+    return 1;
+}*/
+
+
+
+void reconfs_communications_workload(schInfo_t *schInfo){
+
+
+    jobResources_t **jobResources = (jobResources_t**)calloc(2, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 2;
+    jobResources[0]->idGPUs = (size_t*)malloc(jobResources[0]->nGPUs * sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+    jobResources[0]->idGPUs[1] = 1;
+
+
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)malloc(jobResources[1]->nGPUs * sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 4;
+
+
+    size_t nConfigurations = 2;
+    size_t maxBytes = 10000000000; // 100.000.000.000 --> 10GB 
+
+
+        
+    for(size_t nBytes = 10; nBytes < maxBytes; nBytes *= 10){
+        for(size_t conf = 0; conf<nConfigurations; conf++){
+
+            // job arguments
+            size_t ja = nBytes;
+            size_t jb = 1;
+            size_t jc = 1;
+            size_t jd = 1;
+            size_t jmall = 1;
+            void* jargs[6];
+            jargs[0] = &ja;
+            jargs[1] = &jb;
+            jargs[2] = &jc;
+            jargs[3] = &jd;
+            jargs[4] = &jmall;
+            //jargs[5] = &(schInfo.activeJobsControl[0]);
+
+
+            jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+            jobLauncher->jobType = RIGID;
+            jobLauncher->jobPriority = LOW;
+            jobLauncher->nReqGPUs = 2; // no matter
+            jobLauncher->launchTimeStep = 1; // no matter
+            jobLauncher->appType = 2;
+            jobLauncher->argc = 4;
+            jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+            jobLauncher->launchFunc = &launch_communications_app;
+            
+            printf(" Job nBytes = %zu, conf = %zu launched!\n",nBytes,conf);
+            fflush(stdout);
+
+            // add job to pending jobs
+            addPendingJob(jobLauncher);
+            launchJob(getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[conf]);
+
+            
+            while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                sleep(1);
+            }
+            
+            // finish job
+            finishJob(getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+        }
+    }
+}
+
+
+void reconfs_communications_workload_multipleJobs(schInfo_t *schInfo){
+
+
+    jobResources_t **jobResources = (jobResources_t**)calloc(8, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 2;
+    jobResources[0]->idGPUs = (size_t*)malloc(jobResources[0]->nGPUs * sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+    jobResources[0]->idGPUs[1] = 1;
+
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)malloc(jobResources[1]->nGPUs * sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 2;
+    jobResources[1]->idGPUs[1] = 3;
+
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 2;
+    jobResources[2]->idGPUs = (size_t*)malloc(jobResources[2]->nGPUs * sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 4;
+    jobResources[2]->idGPUs[1] = 5;
+
+    jobResources[3] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[3]->nGPUs = 2;
+    jobResources[3]->idGPUs = (size_t*)malloc(jobResources[3]->nGPUs * sizeof(size_t));
+    jobResources[3]->idGPUs[0] = 6;
+    jobResources[3]->idGPUs[1] = 7;
+
+
+
+    jobResources[4] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[4]->nGPUs = 2;
+    jobResources[4]->idGPUs = (size_t*)malloc(jobResources[4]->nGPUs * sizeof(size_t));
+    jobResources[4]->idGPUs[0] = 0;
+    jobResources[4]->idGPUs[1] = 7;
+
+    jobResources[5] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[5]->nGPUs = 2;
+    jobResources[5]->idGPUs = (size_t*)malloc(jobResources[5]->nGPUs * sizeof(size_t));
+    jobResources[5]->idGPUs[0] = 1;
+    jobResources[5]->idGPUs[1] = 6;
+
+    jobResources[6] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[6]->nGPUs = 2;
+    jobResources[6]->idGPUs = (size_t*)malloc(jobResources[6]->nGPUs * sizeof(size_t));
+    jobResources[6]->idGPUs[0] = 2;
+    jobResources[6]->idGPUs[1] = 5;
+
+    jobResources[7] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[7]->nGPUs = 2;
+    jobResources[7]->idGPUs = (size_t*)malloc(jobResources[7]->nGPUs * sizeof(size_t));
+    jobResources[7]->idGPUs[0] = 3;
+    jobResources[7]->idGPUs[1] = 4;
+
+
+    size_t nConfigurations = 2;
+    size_t maxBytes = 10000000000; // 10.000.000.000 --> 10GB 
+
+    for(size_t nBytes = 10; nBytes < maxBytes; nBytes *= 10){
+        for(size_t conf = 0; conf<nConfigurations; conf++){
+
+            // job arguments
+            size_t ja = nBytes;
+            size_t jb = 10;
+            size_t jc = 1;
+            size_t jd = 1;
+            size_t jmall = 1;
+            void* jargs[6];
+            jargs[0] = &ja;
+            jargs[1] = &jb;
+            jargs[2] = &jc;
+            jargs[3] = &jd;
+            jargs[4] = &jmall;
+            //jargs[5] = &(schInfo.activeJobsControl[0]);
+
+            printf(" Job nBytes = %zu, conf = %zu launched!\n",nBytes,conf);
+            fflush(stdout);
+
+            for(size_t job = 0; job<4; job++){
+                
+                jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+
+                jobLauncher->jobType = RIGID;
+                jobLauncher->jobPriority = LOW;
+                jobLauncher->nReqGPUs = 2; // no matter
+                jobLauncher->launchTimeStep = 1; // no matter
+                jobLauncher->appType = 2;
+                jobLauncher->argc = 4;
+                jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                jobLauncher->launchFunc = &launch_communications_app;
+
+                addPendingJob(jobLauncher);
+                launchJob(getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[conf * 4 + job]);
+
+                printf(" -- Job %zu launched with GPUs ", job);
+                for(size_t ngpu = 0; ngpu<jobResources[conf * 4 + job]->nGPUs; ngpu++){
+                    printf(" %zu", jobResources[conf * 4 + job]->idGPUs[ngpu]);
+                }
+                printf(" \n");
+                fflush(stdout);
+            }
+
+            
+            // finish jobs
+            while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                sleep(1);
+            }
+            
+            // finish job
+            finishJob(getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+
+            while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                sleep(1);
+            }
+            
+            // finish job
+            finishJob(getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+
+            while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                sleep(1);
+            }
+            
+            // finish job
+            finishJob(getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+
+            while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                sleep(1);
+            }
+            
+            // finish job
+            finishJob(getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+        }
+    }
+}
+
+
+
 int main(int argc, char* argv[]){
+
+
+    /*manualSch(argc, argv);
+    exit(0);*/
 
     pthread_t thrTime, thrJobs;
     int finished = 0, nGPUs;
@@ -768,8 +1098,13 @@ int main(int argc, char* argv[]){
 
     // thread for counting time
     pthread_create(&thrTime, NULL, resourceMonitoring, (void*)(&finished)); // thread for updating timer
-    pthread_create(&thrJobs, NULL, jobManager, (void*)(jobsTimeline)); // thread for simulating jobs launching to the system
+    //pthread_create(&thrJobs, NULL, jobManager, (void*)(jobsTimeline)); // thread for simulating jobs launching to the system
 
+
+
+    //reconfs_communications_workload(schInfo);
+    reconfs_communications_workload_multipleJobs(schInfo);
+    exit(0);
 
 
     // [DECLARE VARIABLES USED DURING SCHEDULING PROCESS]

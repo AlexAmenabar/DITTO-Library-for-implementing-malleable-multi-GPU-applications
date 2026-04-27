@@ -63,6 +63,7 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+experiments/communicationsExperiments/
 
 # debug information files
 *.dwo
