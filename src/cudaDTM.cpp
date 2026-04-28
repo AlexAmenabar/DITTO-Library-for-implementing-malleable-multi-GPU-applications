@@ -16,8 +16,8 @@
 void setGPUDevice(size_t i){
 
     state_t *state = getState();
-    printf(" -- [APP] Setting dev %zu (real dev %zu)\n", i, getGPUIds()[i]);
-    fflush(stdout);
+    //printf(" -- [APP] Setting dev %zu (real dev %zu)\n", i, getGPUIds()[i]);
+    //fflush(stdout);
     cudaSetDevice(getGPUIds()[i]);
 }
 

@@ -817,16 +817,16 @@ void reconfs_communications_workload(schInfo_t *schInfo){
 
 
     size_t nConfigurations = 2;
-    size_t maxBytes = 10000000000; // 100.000.000.000 --> 10GB 
+    size_t maxBytes = 100000000000 / 4; // 10.000.000.000 --> 10GB 
 
 
         
-    for(size_t nBytes = 10; nBytes < maxBytes; nBytes *= 10){
+    for(size_t nBytes = 25; nBytes < maxBytes; nBytes *= 10){
         for(size_t conf = 0; conf<nConfigurations; conf++){
 
             // job arguments
             size_t ja = nBytes;
-            size_t jb = 1;
+            size_t jb = 10;
             size_t jc = 1;
             size_t jd = 1;
             size_t jmall = 1;
@@ -926,9 +926,9 @@ void reconfs_communications_workload_multipleJobs(schInfo_t *schInfo){
 
 
     size_t nConfigurations = 2;
-    size_t maxBytes = 10000000000; // 10.000.000.000 --> 10GB 
+    size_t maxBytes = 100000000000 / 4; // 10.000.000.000 --> 10GB 
 
-    for(size_t nBytes = 10; nBytes < maxBytes; nBytes *= 10){
+    for(size_t nBytes = 25; nBytes < maxBytes; nBytes *= 10){
         for(size_t conf = 0; conf<nConfigurations; conf++){
 
             // job arguments
