@@ -11,10 +11,12 @@ typedef struct appStruct_t {
     size_t T;
     size_t K;
     size_t cpuK;
+    size_t s;
 
     // iterative application with phases
     size_t P;
     size_t *phases;
+
 
     // iterative application with phases and communication
     size_t nIterationsForCommunications; // number of iterations to be executed before each communication
@@ -23,6 +25,9 @@ typedef struct appStruct_t {
 
     // whether the application is malleable or not (this decides if there are reconfigurations or not)
     size_t malleable; // 0 / 1
+
+    size_t async; // whether communications are performed asynchronously
+
 } appStruct_t;
 
 
@@ -34,5 +39,5 @@ void launch_communications_app(int argc, void* argv[]);
 
 // test application 
 void launch_reconf_test_app(int argc, void* argv[]);
-
+void launch_malloc_test_app(int argc, void* argv[]);
 // test communication application

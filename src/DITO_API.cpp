@@ -10,7 +10,7 @@
 #include "priv_DITTO_API.hpp"
 #include "DDM.hpp"
 #include "DTM.hpp"
-#include "mockSch.hpp"
+#include "RMS.hpp"
 
 
 /* [Global variables] */
@@ -39,10 +39,15 @@ void initDITTO(void *jobControl){
     // initialize application state // TODO: probably it should be a function
     appData->state = initState(jobCtrl->jobResources);
 
+    // [TODO]
+    // TODO: This should me moved to a cuda dependant place, and initialized only when communications are asynchronous
+    appData->cudaStreams = (cudaStream_t*)malloc(8 * sizeof(cudaStream_t));
+    
+    
+    // initialize streams // TMP
+    initializeStreams();
 
     // initialize array of DTIs
-    printf("nDTI = %zu\n", nDTI);
-    fflush(stdout);
     nDTI = 0;
     maxDTI = 10;
     arrDTI = (DTI_t**)calloc(maxDTI, sizeof(DTI_t*));
@@ -50,7 +55,9 @@ void initDITTO(void *jobControl){
 
 void freeDITTO(){
 
-    printf(" -- freeDITTO() not implemented yet!\n");
+    //printf(" -- freeDITTO() not implemented yet!\n");
+
+    destroyStreams();
 
     // free appData, 
 }
@@ -84,9 +91,6 @@ void cpyJobResourcesToState(state_t *state, jobResources_t *rmsJobResources){
     // free old resources
     freeJobResources(state->jobResources);
 
-    printf(" -- RMS GPUS = %zu\n", rmsJobResources->nGPUs);
-    fflush(stdout);
-
     // allocate and copy job resources
     jobResources_t *jobResources = (jobResources_t*)calloc(1,sizeof(jobResources_t));
     state->jobResources = jobResources;
@@ -99,6 +103,8 @@ void cpyJobResourcesToState(state_t *state, jobResources_t *rmsJobResources){
     for(size_t i = 0; i<jobResources->nGPUs; i++)
         jobResources->idGPUs[i] = rmsJobResources->idGPUs[i];
 }
+
+
 
 state_t* initState(jobResources_t *rmsJobResources){
 
@@ -153,6 +159,12 @@ size_t* getGPUIds(){
     return getState()->jobResources->idGPUs;
 }
 
+cudaStream_t* getCudaStreams(){
+    
+    return appData->cudaStreams;
+}
+
+
 void reconfigure(){
 
     double tGPU2CPU = 0.0, tCPU2GPU = 0.0, tRecfg = 0.0;
@@ -161,50 +173,60 @@ void reconfigure(){
     state_t *state = getState();
     jobControl_t *jobControl = getJobControl();
 
-    size_t nGPUs, nOldGPUs;
-
     // number of GPUs before reconfiguration
-    nOldGPUs = getNumberOfGPUs();
+    size_t nNewGPUs = jobControl->jobResources->nGPUs; 
+    size_t nOldGPUs = getNumberOfGPUs();
 
-    clock_gettime(CLOCK_MONOTONIC, &startGPU2CPU);
-    if(nOldGPUs>0){
+    // if the number of source and destination GPUs is the same, the reconfiguration can be efficiently handled by P2P data communication and
+    // reducing the cost of reconfiguration logic
+    /*if(nNewGPUs == nOldGPUs){
+        
+    }*/
+    //else{
+        if(nOldGPUs>0){
+            clock_gettime(CLOCK_MONOTONIC, &startGPU2CPU);
+            // move data from the GPUs to the CPU using the DTIs
+            transferDataGPU2CPU(); // move data from the GPUs to the CPU
+            clock_gettime(CLOCK_MONOTONIC, &endGPU2CPU);
+        }
+        tGPU2CPU = (endGPU2CPU.tv_sec - startGPU2CPU.tv_sec) + (endGPU2CPU.tv_nsec - startGPU2CPU.tv_nsec) / 1e9;
 
-        // move data from the GPUs to the CPU using the DTIs
-        transferDataGPU2CPU(); // move data from the GPUs to the CPU
-    }
-    clock_gettime(CLOCK_MONOTONIC, &endGPU2CPU);
-    tGPU2CPU = (endGPU2CPU.tv_sec - startGPU2CPU.tv_sec) + (endGPU2CPU.tv_nsec - startGPU2CPU.tv_nsec) / 1e9;
 
-    // update state using the information provided by the jobController
-    clock_gettime(CLOCK_MONOTONIC, &startRecfg);
-    updateState(state, jobControl);
-    clock_gettime(CLOCK_MONOTONIC, &endRecfg);
-    tRecfg += (endRecfg.tv_sec - startRecfg.tv_sec) + (endRecfg.tv_nsec - startRecfg.tv_nsec) / 1e9;
-
-
-    // number of GPUs after reconfiguration
-    nGPUs = getNumberOfGPUs();
-    
-    // reconfigure DTIs and resend data to the GPUs, if necessary
-    if(nGPUs>0){
-
-        // configure DTIs
+        // update state using the information provided by the jobController
         clock_gettime(CLOCK_MONOTONIC, &startRecfg);
-        configureDTIs(nGPUs, nOldGPUs);
+
+        destroyStreams(); // end old streams
+        updateState(state, jobControl);
+        initializeStreams(); // initialize new streams
+
         clock_gettime(CLOCK_MONOTONIC, &endRecfg);
         tRecfg += (endRecfg.tv_sec - startRecfg.tv_sec) + (endRecfg.tv_nsec - startRecfg.tv_nsec) / 1e9;
 
-        // move data again from the CPU to the GPUs
-        clock_gettime(CLOCK_MONOTONIC, &startCPU2GPU);
-        transferDataCPU2GPU();
-        clock_gettime(CLOCK_MONOTONIC, &endCPU2GPU);
-        tCPU2GPU += (endCPU2GPU.tv_sec - startCPU2GPU.tv_sec) + (endCPU2GPU.tv_nsec - startCPU2GPU.tv_nsec) / 1e9;
 
-        // reconfigure the kernels
-        reconfigureKernels(NULL, NULL);
-    }
+        // new number of GPUs
+        nNewGPUs = getNumberOfGPUs();
 
-    printf("%zu %zu %lf %lf %lf", nOldGPUs, nGPUs, tGPU2CPU, tRecfg, tCPU2GPU);
+
+        // reconfigure DTIs and resend data to the GPUs, if necessary
+        if(nNewGPUs>0){
+
+            // configure DTIs
+            clock_gettime(CLOCK_MONOTONIC, &startRecfg);
+            configureDTIs(nNewGPUs, nOldGPUs);
+            clock_gettime(CLOCK_MONOTONIC, &endRecfg);
+            tRecfg += (endRecfg.tv_sec - startRecfg.tv_sec) + (endRecfg.tv_nsec - startRecfg.tv_nsec) / 1e9;
+
+            // move data again from the CPU to the GPUs
+            clock_gettime(CLOCK_MONOTONIC, &startCPU2GPU);
+            transferDataCPU2GPU();
+            clock_gettime(CLOCK_MONOTONIC, &endCPU2GPU);
+            tCPU2GPU += (endCPU2GPU.tv_sec - startCPU2GPU.tv_sec) + (endCPU2GPU.tv_nsec - startCPU2GPU.tv_nsec) / 1e9;
+
+            // reconfigure the kernels
+            reconfigureKernels(NULL, NULL);
+        }
+    //}
+    printf("%lf %lf %lf", tGPU2CPU, tRecfg, tCPU2GPU);
 
     // notify that the reconfiguration has been done
     notifyReconfigurationDone(getJobControl());
@@ -372,27 +394,21 @@ DTI_t* getDTIByIndex(int i){
     return NULL;
 }
 
-DTIDesctiption_t* initializeDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum){
+
+DTIDesctiption_t* initializeDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum, communicationType_t commType){
 
     DTIDesctiption_t *description = (DTIDesctiption_t*)calloc(1, sizeof(DTIDesctiption_t));
 
-    if(tpttEnum != entire && tpttEnum != simple){
-
-        printf(" -- 'initializeDTIDescription' only supports 'all' and 'simple' options. Use 'initializeComplexDTIDescription' instead.\n");
-        exit(1);
-    }
-
     description->tpttEnum = tpttEnum;
     description->rmEnum = rmEnum;
-    description->nPartitions = 1;
+    description->commType = commType;
 
     // return created DTI description
     return description;
 }
 
-DTIDesctiption_t* initializeComplexDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum, size_t nPartitions){
 
-    DTIDesctiption_t *description = (DTIDesctiption_t*)calloc(1, sizeof(DTIDesctiption_t));
+DTIDesctiption_t* initializeComplexDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum, communicationType_t commType, size_t s){
 
     if(tpttEnum != complex){
 
@@ -400,15 +416,15 @@ DTIDesctiption_t* initializeComplexDTIDescription(transmissionPatternsEnum tpttE
         exit(1);
     }
 
-    if(nPartitions <= 0){
+    if(s <= 0){
 
-        printf(" -- nPartitions must be a positive integer value.\n");
+        printf(" -- s must be a positive integer value.\n");
         exit(1);
     }
 
-    description->tpttEnum = tpttEnum;
-    description->rmEnum = rmEnum;
-    description->nPartitions = nPartitions;
+    DTIDesctiption_t *description = initializeDTIDescription(tpttEnum,rmEnum, commType);
+    description->s = s;
+
 
     // return created DTI description
     return description;
@@ -419,15 +435,14 @@ void printDTI(DTI_t *DTI){
     size_t i, j;
     state_t *state = getState();
     size_t nGPUs = getNumberOfGPUs();
-    DTIDesctiption_t *description = DTI->description;
 
     for(i = 0; i<nGPUs; i++){
 
         printf(" -- Printing GPU %zu data --\n", i);
 
-        printf("     Number of elements   = %zu\n", DTI->nPerGPU[i]);
+        printf("     Number of elements = %zu\n", DTI->nPerGPU[i]);
 
-        for(j = 0; j<description->nPartitions; j++){
+        for(j = 0; j<DTI->nPartitionsPerGPU[i]; j++){
             printf("     Number of elements in partition %zu = %zu\n", j, DTI->nPerPartition[i][j]);
             printf("     First element of partition %zu = %zu\n", j, DTI->offsetPerPartition[i][j]);
         }

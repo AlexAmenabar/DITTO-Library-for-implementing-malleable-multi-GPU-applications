@@ -3,7 +3,7 @@
 #include <stdlib.h>    
 
 # include "jobQueue.hpp"
-# include "mockSch.hpp"
+# include "RMS.hpp"
 
 // queue operations: lock queue, perform operations, unlock queue
 

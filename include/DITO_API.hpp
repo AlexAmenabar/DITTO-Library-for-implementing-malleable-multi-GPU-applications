@@ -1,6 +1,11 @@
 #ifndef DITO_APP_H
 #define DITO_APP_H
 
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+
 // declare a type to represent userFunctions for data transmission
 typedef void* (*GenericFunction)(void*);
 typedef struct jobControl_t jobControl_t; // RMS communication
@@ -42,6 +47,57 @@ enum remainingElementsEnum {
     last
 };
 
+
+enum cudaMemoryTypeEnum {
+
+    pinnedComm,
+    nonPinnedComm
+};
+
+enum transmissionTypeEnum {
+
+    syncComm,
+    asyncComm
+};
+
+enum transferStepsEnum {
+
+    oneStepComm,
+    twoStepsComm,
+    stridedComm
+};
+
+enum transferCoresEnum {
+
+    singleCoreComm,
+    multiCoreComm
+};
+
+// description of the transmission
+typedef struct communicationType_t {
+
+    cudaMemoryTypeEnum cudaMemoryType;
+    transmissionTypeEnum transmissionType;
+    transferStepsEnum transferSteps;
+    transferCoresEnum transferCores;
+} communicationType_t;
+
+/*enum communicationTypeEnum {
+
+    // syncComm: synchronous communication in two steps
+    // syncPinnedComm: synchronous communication in two steps using pinned memory
+    // syncOneStepComm: synchronous communication in one steps
+    // syncOneStepPinnedComm: synchronous communication in one step using pinned memory
+    // asyncComm: asynchronous communication (one step and pinned memory)
+    
+    syncComm,
+    syncPinnedComm,
+    asyncTwoStepComm,
+    syncOneStepComm,
+    syncOneStepPinnedComm,
+    asyncComm
+};*/
+
 // Structure for describing data array redistributions for simple patterns
 typedef struct DTIDesctiption_t{
 
@@ -49,7 +105,10 @@ typedef struct DTIDesctiption_t{
     // enumerations providing more details about the DTI
     transmissionPatternsEnum tpttEnum;
     remainingElementsEnum rmEnum;
-    size_t nPartitions; // the total number of elements N is diveded in nPartitions
+    communicationType_t commType;
+
+    // if complex, the size of each partition
+    size_t s;
 
 } DTIDesctiption_t;
 
@@ -78,6 +137,7 @@ typedef struct DTI_t {
 
     // information of how data is organized among several GPUs
     size_t *nPerGPU; // [nGPUs] number of elements on each GPU (the sum of the elements on all partitions)
+    size_t *nPartitionsPerGPU; // [nGPUs] number of partitions on each GPU
     size_t **nPerPartition; // [nGPUs x nPartitions] number of elements on each partition per GPU
     size_t **offsetPerPartition; // [nGPUs x nPartitions] index of the first element on each partition
 
@@ -91,6 +151,9 @@ typedef struct public_APP_data_t {
 
     //reconfData_t *reconfData;
     jobControl_t *jobControl; // communication with the scheduler
+
+    // streams (move in the future)
+    cudaStream_t *cudaStreams;
 
 } public_APP_Data_t;
 
@@ -135,6 +198,8 @@ size_t getNumberOfGPUs();
 
 /// get the GPU identifiers available for the job
 size_t* getGPUIds();
+
+cudaStream_t* getCudaStreams();
 
 
 /* [RECONFIGURATIONS] */
@@ -181,8 +246,8 @@ void setGPUData(DTI_t *DTI, void *gpuData, int i);
 void* getGPUData(DTI_t *DTI, int i);
 
 
-DTIDesctiption_t* initializeDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum);
-DTIDesctiption_t* initializeComplexDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum, size_t nPartitions);
+DTIDesctiption_t* initializeDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum, communicationType_t commType);
+DTIDesctiption_t* initializeComplexDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum, communicationType_t commType, size_t nPartitions);
 void freeDescription(DTIDesctiption_t *description, size_t nGPUs);
 
 #endif

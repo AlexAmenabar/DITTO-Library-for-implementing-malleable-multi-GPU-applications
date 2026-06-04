@@ -1,12 +1,14 @@
-#ifndef MOCKSCH_HPP
-#define MOCKSCH_HPP
+#ifndef RMS_HPP
+#define RMS_HPP
 
 #include <pthread.h>
 #include <time.h>
 
 #include "jobQueue.hpp"
+#include "eventQueue.hpp"
 
-#define MONITOR_STEPS 20
+#define MONITOR_STEPS 1
+//20
 
 enum eventsEnum {
 
@@ -64,13 +66,12 @@ typedef struct jobLauncher_t {
     // Information for launching the job
     size_t nReqMinGPUs; // minimum number of required GPUs
     size_t nReqGPUs; // requested GPUs or maximum number of GPUs
+    size_t estimatedDuration;
     jobTypeEnum jobType; // rigid, moldable, malleable, flexible (0, 1, 2, 3)
     jobPriorityEnum jobPriority;
     size_t appType;
     size_t launchTimeStep; // time step in which it has been launched
     
-
-
 } jobLauncher_t;
 
 
@@ -101,6 +102,10 @@ typedef struct jobControl_t {
     pthread_mutex_t lockReqGPUs; // lock for synchronization
     pthread_cond_t condReqGPUs; // cond 
 
+    // temporal
+    char startRunning;
+    pthread_mutex_t lockStartRunning;
+
     char finished; // 0, not GPU request; 1, GPU request
     pthread_mutex_t lockFinished; // lock for synchronization
 
@@ -113,12 +118,18 @@ typedef struct jobControl_t {
 
 typedef struct jobMonitoring_t {
 
-    double *gpuUsage; // usage per GPU (mean): sum, and after N steps, compute mean
-    size_t step; // steps with this configuration
+    unsigned int (*gpuUsage)[100]; // usage per GPU in the last 100 steps: sum, and after N steps, compute mean
+    unsigned int (*gpuTemperature)[100];
+    unsigned int (*gpuEnergyConsumption)[100];
+    unsigned int (*gpuPCIeThroughput)[100];
+
+    size_t step, steps = 100; // steps with this configuration
 
     //
     size_t finalUsageGPUs;
     double finalEnergyConsumption;
+    double meanTemperature;
+
 
 } jobMonitoring_t;
 
@@ -151,18 +162,26 @@ typedef struct job_t{
 
 } job_t;
 
+
+typedef struct schInfo_t schInfo_t;
+
 /// Scheduler structure
-typedef struct schInfo_t {
+struct schInfo_t {
+
+    void (*sched)(schInfo_t *schInfo);
+    void (*rconf)(schInfo_t *schInfo);
 
     // System resources and availability
     size_t nGPUs;
     size_t nAvGPUs;
     char *avGPUs; // 0 | 1
-    unsigned int *gpuJob; // job associated to the GPU
+    unsigned int *gpuJob; // job (ID) associated to the GPU
     
     // Monitoring
     unsigned int (*gpuUtilization) [MONITOR_STEPS]; // (nGPUs)? arrays of MONITOR_STEPS
     double (*gpuPower) [MONITOR_STEPS];
+    unsigned int (*gpuTemperature) [MONITOR_STEPS];
+    unsigned int (*gpuPCIeThroughput) [MONITOR_STEPS];
 
     // Users
     user_t *users;
@@ -180,7 +199,10 @@ typedef struct schInfo_t {
     // Jobs with pending reconfigurations
     jobQueue_t reconfiguringJobs;
 
-} schInfo_t;
+    // queue of events
+    eventQueue_t eventQueue;
+
+};
 
 /// Timeline that stores jobs for adding them to the system
 typedef struct jobsTimeline_t {
@@ -190,6 +212,25 @@ typedef struct jobsTimeline_t {
 
 } jobsTimeline_t;
 
+
+enum EVENT_ENUM {
+
+    JOB_ARRIVAL, // job arrived to the system
+    JOB_FINISHED, // job finished its execution
+    RECONFIGURATION_REQUEST, // reconfiguration requested by the job
+    RECONFIGURATION_DECISION, // reconfiguration decided by the RMS
+    RECONFIGURATION_FINISHED // job finished reconfiguration
+};
+
+typedef struct event_t {
+
+    EVENT_ENUM eventEnum; // description of the vent
+    
+    job_t *job; // pointer to the job realted to the event
+    jobQueue_t *jobQueue; // queue of the job
+    size_t jobIndex; // job index in the queue
+
+} event_t;
 
 
 // [JOB MANAGEMENT]
@@ -216,7 +257,7 @@ void scheduleReconfiguration(job_t *job, size_t jobIndex, jobResources_t *jobRes
 void jobFinishedReconfiguration(job_t *job, size_t jobIndex);
 
 /// Job finished
-void finishJob();
+void finishJob(job_t *job, size_t runningJobIndex);
 
 jobMonitoring_t* initJobMonitor(jobMonitoring_t *jobMonitor, jobResources_t *jobResources);
 
@@ -234,6 +275,10 @@ void allocateResources(schInfo_t *schInfo, jobResources_t *jobResources);
 
 /// Deallocate GPUs and update system availability state
 void deallocateResources(schInfo_t *schInfo, jobResources_t *jobResources);
+
+
+// structs allocation and deallocations
+void deallocateJobResourcesStruct(jobResources_t **jobResources);
 
 
 // [NOTIFICATIONS]
@@ -272,5 +317,10 @@ void notifySigGPUs(jobControl_t *jobControl);
 /// Notify to the scheduler that the job require GPU(s)
 void notifyReqGPUs(jobControl_t *jobControl);
 
+
+// Resources management
+
+// This method finds the first nGPUs avaiable GPUs
+void selectFirstAvailableGPUs(size_t *selectedGPUs, size_t nLaunchGPUs, schInfo_t *schInfo);
 
 #endif
