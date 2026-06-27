@@ -40,4 +40,7 @@ void launch_communications_app(int argc, void* argv[]);
 // test application 
 void launch_reconf_test_app(int argc, void* argv[]);
 void launch_malloc_test_app(int argc, void* argv[]);
+
+void launch_reconfs_test_app_new(int argc, void* argv[]);
+
 // test communication application

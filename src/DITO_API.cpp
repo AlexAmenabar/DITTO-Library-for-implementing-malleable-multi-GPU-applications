@@ -17,49 +17,54 @@
 
 // App Data
 thread_local public_APP_data_t *appData = NULL;
+thread_local reconfData_t *reconfData = NULL;
+thread_local size_t *virtualTopology = NULL;
 
 // DTIs
 thread_local DTI_t** arrDTI = NULL;
 thread_local size_t nDTI; 
 thread_local size_t maxDTI;
 
-
 /* [INITIALIZATION] */
 
 void initDITTO(void *jobControl){
 
-    jobControl_t *jobCtrl = (jobControl_t*)jobControl;
-
-    // allocate memory for appData structure
+    // allocate memory for general information
     appData = (public_APP_Data_t*)calloc(1, sizeof(public_APP_Data_t));
 
-    //appData->reconfData = initReconfigurationData(); // initialize structure for storing storeing reconfiguration data
-    appData->jobControl = jobCtrl; // communication with the scheduler
+    // initialize job control
+    appData->jobControl = (jobControl_t*)jobControl; 
 
-    // initialize application state // TODO: probably it should be a function
-    appData->state = initState(jobCtrl->jobResources);
+    // initialize application state (job resources)
+    appData->state = initState(appData->jobControl->jobResources);
 
-    // [TODO]
+    // allocate memory for reconfData structure
+    reconfData = (reconfData_t*)calloc(1, sizeof(reconfData_t));
+
+    // initialize virtual topology
+    virtualTopology = (size_t*)calloc(appData->state->jobResources->nGPUs, sizeof(size_t));
+    for(size_t i = 0; i<appData->state->jobResources->nGPUs; i++){
+
+        virtualTopology[i] = i;
+    }
+
     // TODO: This should me moved to a cuda dependant place, and initialized only when communications are asynchronous
-    appData->cudaStreams = (cudaStream_t*)malloc(8 * sizeof(cudaStream_t));
-    
-    
-    // initialize streams // TMP
-    initializeStreams();
+    appData->cudaStreams = (cudaStream_t*)malloc(8 * sizeof(cudaStream_t)); // 8 because we consider that it is the maximum number of GPUs we will use for now, in intra-node configurations
+    initializeStreams(appData->jobControl->jobResources);
 
-    // initialize array of DTIs
+    // initialize DTI data
     nDTI = 0;
     maxDTI = 10;
     arrDTI = (DTI_t**)calloc(maxDTI, sizeof(DTI_t*));
 }
 
+// TODO
 void freeDITTO(){
 
-    //printf(" -- freeDITTO() not implemented yet!\n");
+    // free all the memory used by DITTO
 
-    destroyStreams();
-
-    // free appData, 
+    // destroy streams
+    destroyStreams(getState()->jobResources);
 }
 
 jobControl_t* getJobControl(){
@@ -68,8 +73,101 @@ jobControl_t* getJobControl(){
 }
 
 
-/* [STATE] */
 
+state_t* initState(jobResources_t *rmsJobResources){
+
+    // allocat memory for state variable
+    state_t *state = (state_t*)calloc(1, sizeof(state_t));
+
+    // copy resources from jobControl
+    cpyJobResourcesToState(state, rmsJobResources);
+    
+    // initialize reconfiguration resources
+    state->reconfJobResources = NULL;
+
+    // store state in the global variable and return
+    appData->state = state; 
+
+    return state;
+}
+
+state_t* getState(){
+
+    return appData->state;
+}
+
+state_t* updateState(state_t *state, jobControl_t *jobControl){
+    
+    // update job resources
+    updateApplicationResources(state);
+
+    // return the new state
+    return state;
+}
+
+state_t* storeState(state_t *state){
+
+    printf(" -- Store state not implemented yet\n");
+    return state;
+}
+
+// TODO
+void freeState(state_t *state){
+
+    if(state){
+
+        freeJobResources(state->jobResources);
+        free(state);
+    }
+}
+
+void updateApplicationResources(state_t *state){
+
+    // move reconfJobResources to jobResources
+    freeJobResources(state->jobResources);
+    state->jobResources = state->reconfJobResources;
+
+    // initialize reconfJobResources pointer
+    state->reconfJobResources = NULL;
+}
+
+// copy job resources to state (never used)
+void cpyJobResourcesToState(state_t *state, jobResources_t *rmsJobResources){
+
+    // deallocate job resources in case it is allocated
+    if(state->jobResources)
+        freeJobResources(state->jobResources);
+
+    // copy rmsJobResources to state
+    state->jobResources = cpyJobResources(rmsJobResources);
+}
+
+
+void cpyReconfResourcesToState(state_t *state, jobResources_t *reconfJobResources){
+
+    // if it exist, deallocate old data
+    freeJobResources(state->reconfJobResources);
+
+    // copy job resources from the jobControl to the job state 
+    state->reconfJobResources = cpyJobResources(reconfJobResources);
+}
+
+jobResources_t* cpyJobResources(jobResources_t *jobResources){
+
+    // allocate memory for the new jobResources structure
+    jobResources_t *cpJobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    
+    // copy data
+    cpJobResources->nGPUs = jobResources->nGPUs;
+    cpJobResources->idGPUs = (size_t*)calloc(jobResources->nGPUs, sizeof(size_t));
+    for(size_t i = 0; i<jobResources->nGPUs; i++){
+
+        cpJobResources->idGPUs[i] = jobResources->idGPUs[i];
+    }
+
+    // return copy
+    return cpJobResources;
+}
 
 void freeJobResources(jobResources_t *jobResources){
         
@@ -83,71 +181,6 @@ void freeJobResources(jobResources_t *jobResources){
         free(jobResources);
     }
 }
-
-void cpyJobResourcesToState(state_t *state, jobResources_t *rmsJobResources){
-
-    jobResources_t *appJobResources = state->jobResources;
-
-    // free old resources
-    freeJobResources(state->jobResources);
-
-    // allocate and copy job resources
-    jobResources_t *jobResources = (jobResources_t*)calloc(1,sizeof(jobResources_t));
-    state->jobResources = jobResources;
-
-    // store the number of GPUs
-    jobResources->nGPUs = rmsJobResources->nGPUs;
-    
-    // allocate array for GPU identifiers
-    jobResources->idGPUs = (size_t*)malloc(jobResources->nGPUs * sizeof(size_t));
-    for(size_t i = 0; i<jobResources->nGPUs; i++)
-        jobResources->idGPUs[i] = rmsJobResources->idGPUs[i];
-}
-
-
-
-state_t* initState(jobResources_t *rmsJobResources){
-
-    // allocat memory for state variable
-    state_t *state = (state_t*)calloc(1,sizeof(state_t));
-
-    // copy job resources from the RMS structure to the application structure
-    cpyJobResourcesToState(state, rmsJobResources);
-
-    // store state in the global variable and return
-    appData->state = state; 
-    return state;
-}
-
-void freeState(state_t *state){
-
-    if(state){
-
-        freeJobResources(state->jobResources);
-        free(state);
-    }
-}
-
-state_t* getState(){
-
-    return appData->state;
-}
-
-state_t* updateState(state_t *state, jobControl_t *jobControl){
-    
-    // update job resources
-    cpyJobResourcesToState(state, jobControl->jobResources);
-
-    // return the new state
-    return state;
-}
-
-state_t* storeState(state_t *state){
-
-    printf(" -- Store state not implemented yet\n");
-    return state;
-}
-
 
 size_t getNumberOfGPUs(){
 
@@ -165,71 +198,114 @@ cudaStream_t* getCudaStreams(){
 }
 
 
-void reconfigure(){
+void reconfigure(reconfDirEnum reconfDir){
 
-    double tGPU2CPU = 0.0, tCPU2GPU = 0.0, tRecfg = 0.0;
-    struct timespec startGPU2CPU, startCPU2GPU, startRecfg, endGPU2CPU, endCPU2GPU, endRecfg;
+    // TODO: revise DDM and DTM functions
+    // TODO: deallocations
+    // TODO: GPU-CPU-GPU correction
+
+    double tRecfg = 0.0, tConf = 0.0, tComm = 0.0, tGPU2CPU = 0.0, tCPU2GPU = 0.0;
+    struct timespec startRecfg, endRecfg, startConf, endConf, startComm, endComm, startGPU2CPU, startCPU2GPU, endGPU2CPU, endCPU2GPU;
+
+    jobResources_t *reconfJobResources, *jobResources;
 
     state_t *state = getState();
     jobControl_t *jobControl = getJobControl();
 
-    // number of GPUs before reconfiguration
-    size_t nNewGPUs = jobControl->jobResources->nGPUs; 
-    size_t nOldGPUs = getNumberOfGPUs();
+    // copy reconfiguration job resources to job
+    cpyReconfResourcesToState(state, jobControl->reconfJobResources);
 
-    // if the number of source and destination GPUs is the same, the reconfiguration can be efficiently handled by P2P data communication and
-    // reducing the cost of reconfiguration logic
-    /*if(nNewGPUs == nOldGPUs){
+    // get job resources
+    jobResources = state->jobResources;
+    reconfJobResources = state->reconfJobResources;
+    reconfTypeEnum reconfEnum;
+
+    // set the reconfiguration type in case we perform a GPU2GPU reconfiguraiton 
+    if(reconfDir == GPU2GPU)
+    {
+        if(jobResources->nGPUs < reconfJobResources->nGPUs) 
+            reconfEnum = expand;
+        else if(jobResources->nGPUs > reconfJobResources->nGPUs)
+            reconfEnum = shrink;
+        else 
+            reconfEnum = keep;
+    }
+
+    // configure reconfiguration - GPUs to move data from each GPU (DDM)
+    // if goes from GPU to GPU, it is necessary to decide which GPUs will use
+    // each GPU
+    if(reconfDir == GPU2GPU){
+       
+        clock_gettime(CLOCK_MONOTONIC, &startConf);
+        if(reconfEnum == expand){
+
+            configureExpansion(reconfJobResources, jobResources);
+        }
+        else if(reconfEnum == shrink){
+            
+            configureShrink(reconfJobResources, jobResources);
+        }
+        else{
+
+            configureN2N(reconfJobResources, jobResources);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &endConf);
+        tConf += (endConf.tv_sec - startConf.tv_sec) + (endConf.tv_nsec - startConf.tv_nsec) / 1e9;
+    }
+    
+
+    // if it goes through the CPU, move data to the CPU first
+    if(reconfDir != GPU2GPU){
+
+        clock_gettime(CLOCK_MONOTONIC, &startGPU2CPU);
+        // move data from the GPUs to the CPU using the DTIs
+        transferDataGPU2CPU(); // move data from the GPUs to the CPU
+        clock_gettime(CLOCK_MONOTONIC, &endGPU2CPU);
+        tGPU2CPU += (endGPU2CPU.tv_sec - startGPU2CPU.tv_sec) + (endGPU2CPU.tv_nsec - startGPU2CPU.tv_nsec) / 1e9;
+        tComm += tGPU2CPU;
+    }
+
+    
+    // generate metadata for moving to each GPUs (DDM)
+    clock_gettime(CLOCK_MONOTONIC, &startConf);
+    configureDTIs(jobResources, reconfJobResources, reconfDir);
+    clock_gettime(CLOCK_MONOTONIC, &endConf);
+    tConf += (endConf.tv_sec - startConf.tv_sec) + (endConf.tv_nsec - startConf.tv_nsec) / 1e9;
+
+
+    // perform data redistributions (DTM)
+    if(reconfDir == GPU2GPU){
+        clock_gettime(CLOCK_MONOTONIC, &startComm);
+        transferDataGPU2GPU(reconfEnum);
+        clock_gettime(CLOCK_MONOTONIC, &endComm);
+        tComm += (endComm.tv_sec - startComm.tv_sec) + (endComm.tv_nsec - startComm.tv_nsec) / 1e9;
+    }
+
+    // destroy old streams and initialize new ones
+    destroyStreams(jobResources);
+    initializeStreams(reconfJobResources);
+
+    // update state
+    updateState(state, jobControl);
+
+    if(reconfDir != GPU2GPU){
         
-    }*/
-    //else{
-        if(nOldGPUs>0){
-            clock_gettime(CLOCK_MONOTONIC, &startGPU2CPU);
-            // move data from the GPUs to the CPU using the DTIs
-            transferDataGPU2CPU(); // move data from the GPUs to the CPU
-            clock_gettime(CLOCK_MONOTONIC, &endGPU2CPU);
-        }
-        tGPU2CPU = (endGPU2CPU.tv_sec - startGPU2CPU.tv_sec) + (endGPU2CPU.tv_nsec - startGPU2CPU.tv_nsec) / 1e9;
+        // move data again from the CPU to the GPUs
+        clock_gettime(CLOCK_MONOTONIC, &startCPU2GPU);
+        transferDataCPU2GPU();
+        clock_gettime(CLOCK_MONOTONIC, &endCPU2GPU);
+        tCPU2GPU += (endCPU2GPU.tv_sec - startCPU2GPU.tv_sec) + (endCPU2GPU.tv_nsec - startCPU2GPU.tv_nsec) / 1e9;
+        tComm += tCPU2GPU;
+    }
 
-
-        // update state using the information provided by the jobController
-        clock_gettime(CLOCK_MONOTONIC, &startRecfg);
-
-        destroyStreams(); // end old streams
-        updateState(state, jobControl);
-        initializeStreams(); // initialize new streams
-
-        clock_gettime(CLOCK_MONOTONIC, &endRecfg);
-        tRecfg += (endRecfg.tv_sec - startRecfg.tv_sec) + (endRecfg.tv_nsec - startRecfg.tv_nsec) / 1e9;
-
-
-        // new number of GPUs
-        nNewGPUs = getNumberOfGPUs();
-
-
-        // reconfigure DTIs and resend data to the GPUs, if necessary
-        if(nNewGPUs>0){
-
-            // configure DTIs
-            clock_gettime(CLOCK_MONOTONIC, &startRecfg);
-            configureDTIs(nNewGPUs, nOldGPUs);
-            clock_gettime(CLOCK_MONOTONIC, &endRecfg);
-            tRecfg += (endRecfg.tv_sec - startRecfg.tv_sec) + (endRecfg.tv_nsec - startRecfg.tv_nsec) / 1e9;
-
-            // move data again from the CPU to the GPUs
-            clock_gettime(CLOCK_MONOTONIC, &startCPU2GPU);
-            transferDataCPU2GPU();
-            clock_gettime(CLOCK_MONOTONIC, &endCPU2GPU);
-            tCPU2GPU += (endCPU2GPU.tv_sec - startCPU2GPU.tv_sec) + (endCPU2GPU.tv_nsec - startCPU2GPU.tv_nsec) / 1e9;
-
-            // reconfigure the kernels
-            reconfigureKernels(NULL, NULL);
-        }
-    //}
-    printf("%lf %lf %lf", tGPU2CPU, tRecfg, tCPU2GPU);
+    // destroy reconfiguration context TODO
+    //destroyReconfContext(); // deallocate variables that were only necessary for performing the reconfiguration
+    // - gpusToSplit
 
     // notify that the reconfiguration has been done
     notifyReconfigurationDone(getJobControl());
+
+    printf("%lf %lf %lf %lf ", tConf, tComm, tGPU2CPU, tCPU2GPU);
 }
 
 // TODO
@@ -272,6 +348,31 @@ void transferDataGPU2CPU(){
         else{
             arrDTI[i]->moveGPU2CPU(arrDTI[i]);
         }
+    }
+}
+
+/*void transferDataGPU2GPU(){
+
+    size_t i;
+
+    for(i = 0; i<nDTI; i++){
+
+        cpyDataGPU2GPU(arrDTI[i]);
+    }
+}*/
+
+void transferDataGPU2GPU(reconfTypeEnum reconfEnum){
+
+    size_t i;
+
+    for(i = 0; i<nDTI; i++){
+        
+        if(reconfEnum == expand)
+            reconfExpand(arrDTI[i]);
+        else if(reconfEnum == shrink)
+            reconfShrink(arrDTI[i]);
+        else if(reconfEnum == keep)
+            reconfN2N(arrDTI[i]);
     }
 }
 
@@ -358,14 +459,14 @@ void addDTI(DTI_t *DTI){
     nDTI += 1;
 }
 
-void configureDTIs(size_t nGPUs, size_t nOldGPUs){
+void configureDTIs(jobResources_t *jobResources, jobResources_t *reconfJobResources, reconfDirEnum reconfDir){
 
     size_t i;
 
     // loop over all DTIs and configure following the description
     for(i = 0; i<nDTI; i++){
 
-        configureDTI(arrDTI[i], nGPUs, nOldGPUs);
+        configureDTI(arrDTI[i], jobResources, reconfJobResources, reconfDir);
     }
 }
 

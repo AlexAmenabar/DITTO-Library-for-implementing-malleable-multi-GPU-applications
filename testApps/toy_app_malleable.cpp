@@ -55,7 +55,7 @@ void simulatePhases(appStruct_t *data){
         // reconfiguration point
         if(data->malleable == 1 && checkIfReconfiguration(getJobControl())){
 
-            reconfigure();
+            reconfigure(GPU2GPU);
         }
 
         // loop over app phases
@@ -75,7 +75,7 @@ void simulatePhases(appStruct_t *data){
                         sleep(0.1);
                     }
 
-                    reconfigure();
+                    reconfigure(GPU2GPU);
                 }
 
                 // move data from the GPU to the CPU
@@ -97,7 +97,7 @@ void simulatePhases(appStruct_t *data){
                             sleep(0.1);
                         }
 
-                        reconfigure();
+                        reconfigure(GPU2GPU);
                     }
                 }
 
@@ -143,7 +143,7 @@ void simulateIterative(appStruct_t *data){
         // reconfiguration point
         if(checkIfReconfiguration(getJobControl())){
 
-            reconfigure();
+            reconfigure(GPU2GPU);
         }
 
 
@@ -203,7 +203,7 @@ void simulateIterativeCommunications(appStruct_t *data){
         // reconfiguration point, check if there is any pending reconfiguration
         if(checkIfReconfiguration(getJobControl())){
 
-            reconfigure();
+            reconfigure(GPU2GPU);
         }
 
 
@@ -477,7 +477,7 @@ void launch_iterative_app(int argc, void* argv[]){
     DTI_t *appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
+    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -580,7 +580,7 @@ void launch_phases_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
+    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -676,7 +676,7 @@ void launch_communications_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
+    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -713,8 +713,12 @@ void launch_reconf_test_app(int argc, void* argv[]){
     size_t i;
 
     // initialize DITTO environment
-    // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
+    printf(" Initializing DITTO\n");
+    fflush(stdout);
+
     initDITTO(argv[argc+1]);
+    printf(" DITTO initialized\n");
+    fflush(stdout);
 
     // APP: initialize data structure used by the application
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
@@ -741,7 +745,368 @@ void launch_reconf_test_app(int argc, void* argv[]){
         appData->arr[i] = (float)i;//(float)rand()/(float)(RAND_MAX);
 
     
+    // set communication type
+    communicationType_t commType;
+    if(pinned)
+        commType.cudaMemoryType = pinnedComm;
+    else 
+        commType.cudaMemoryType = nonPinnedComm;
 
+    if(async)
+        commType.transmissionType = asyncComm;
+    else
+        commType.transmissionType = syncComm;
+    
+    if(steps == 0)
+        commType.transferSteps = oneStepComm;
+    else if(steps == 1)
+        commType.transferSteps = twoStepsComm;
+    else
+        commType.transferSteps = stridedComm;
+
+    if(cores)
+        commType.transferCores = multiCoreComm;
+    else
+        commType.transferCores = singleCoreComm;
+
+
+    // Initialize DTIs for automatically managing CPU-GPU communications
+    DTI_t *appDataDTI;
+    if(appData->s > 0)
+        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeComplexDTIDescription(complex, ordered, commType, appData->s));
+    else
+        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
+
+    for(size_t i = 0; i<appData->N; i++){
+
+        printf("%f ", appData->arr[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+
+    // configure all DTIs for automatic data transference // TODO: configure in initialization
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
+
+    // send data to the GPU
+    transferDataCPU2GPU();
+
+    struct timespec start, end;
+    double etime = 0.0;
+
+    // wait reconfiguration
+    while(checkIfReconfiguration(getJobControl()) == 0){
+        
+        /*printf(" -- Checking reconf\n");
+        fflush(stdout);*/ 
+        sleep(1);
+    }
+
+    // print GPUs
+    printf(" -- Printing current GPU configuration (%zu): ", getJobControl()->jobResources->nGPUs);
+    for(size_t i = 0; i<getJobControl()->jobResources->nGPUs; i++){
+        printf("%zu ", getJobControl()->jobResources->idGPUs[i]);
+    }
+    printf("\n");
+    printf(" -- Printing GPU configuration for reconfiguration (%zu): ", getJobControl()->reconfJobResources->nGPUs);
+    for(size_t i = 0; i<getJobControl()->reconfJobResources->nGPUs; i++){
+        printf("%zu ", getJobControl()->reconfJobResources->idGPUs[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    reconfigure(GPU2GPU);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    etime += (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("Reconfiguration finished in: %lf", etime);
+    fflush(stdout);
+
+
+    // transfer data fron the GPUs to the CPU
+    for(i = 0; i<appData->N; i++){
+        ((float*)(appDataDTI->cpuData))[i] = 0;
+    }
+
+    transferDataGPU2CPU();
+    
+
+    for(size_t i = 0; i<appData->N; i++){
+
+        printf("%f ", appData->arr[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+    int correct = 1;
+    for(i = 0; i<appData->N; i++){
+        if( ((float*)(appDataDTI->cpuData))[i] != (float)i){
+            correct = 0;
+            break;        
+        }
+    }
+    
+    if(!correct)
+        printf(" -- [APP]: Incorrect result!!!");
+    else
+        printf(" -- [APP]: Correct results!!!!");
+
+    if(pinned)
+        cudaFreeHost(appDataDTI->cpuData);
+    else
+        free(appDataDTI->cpuData);
+
+
+    // destroy streams
+    freeDITTO();
+
+    // deallocate streams
+
+    // deallocate DITTO environment memory
+
+    // signal that job finished
+    jobFinished(getJobControl());
+
+    pthread_exit(NULL);
+}
+
+
+
+
+void launch_reconfs_test_app(int argc, void* argv[]){
+
+    size_t i;
+
+    // initialize DITTO environment
+    printf(" Initializing DITTO\n");
+    fflush(stdout);
+
+    initDITTO(argv[argc+1]);
+    printf(" DITTO initialized\n");
+    fflush(stdout);
+
+    // APP: initialize data structure used by the application
+    appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
+    appData->N = *(size_t*)argv[0];
+    appData->s = *(size_t*)argv[1];
+    //appData->async = *(size_t*)argv[2];
+
+    // communication info
+    size_t pinned = *(size_t*)argv[2];
+    size_t async = *(size_t*)argv[3];
+    size_t steps = *(size_t*)argv[4];
+    size_t cores = *(size_t*)argv[5];
+
+    appData->malleable = *(size_t*)argv[argc];
+
+    // allocate memory for App Data
+    if(pinned) // pinned memory
+        cudaMallocHost(&appData->arr, appData->N * sizeof(float));
+    else
+        appData->arr = (float*)calloc(appData->N, sizeof(float));
+    
+    // initialize data
+    for(i = 0; i<appData->N; i++)
+        appData->arr[i] = (float)i;//(float)rand()/(float)(RAND_MAX);
+
+    
+    // set communication type
+    communicationType_t commType;
+    if(pinned)
+        commType.cudaMemoryType = pinnedComm;
+    else 
+        commType.cudaMemoryType = nonPinnedComm;
+
+    if(async)
+        commType.transmissionType = asyncComm;
+    else
+        commType.transmissionType = syncComm;
+    
+    if(steps == 0)
+        commType.transferSteps = oneStepComm;
+    else if(steps == 1)
+        commType.transferSteps = twoStepsComm;
+    else
+        commType.transferSteps = stridedComm;
+
+    if(cores)
+        commType.transferCores = multiCoreComm;
+    else
+        commType.transferCores = singleCoreComm;
+
+
+    // Initialize DTIs for automatically managing CPU-GPU communications
+    DTI_t *appDataDTI;
+    if(appData->s > 0)
+        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeComplexDTIDescription(complex, ordered, commType, appData->s));
+    else
+        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
+
+    for(size_t i = 0; i<appData->N; i++){
+
+        printf("%f ", appData->arr[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+
+    // configure all DTIs for automatic data transference // TODO: configure in initialization
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
+
+    // send data to the GPU
+    transferDataCPU2GPU();
+
+    struct timespec start, end;
+    double etime = 0.0;
+
+    // wait reconfiguration
+    while(checkIfReconfiguration(getJobControl()) == 0){
+        
+        /*printf(" -- Checking reconf\n");
+        fflush(stdout);*/ 
+        sleep(1);
+    }
+
+    // print GPUs
+    printf(" -- Printing current GPU configuration (%zu): ", getJobControl()->jobResources->nGPUs);
+    for(size_t i = 0; i<getJobControl()->jobResources->nGPUs; i++){
+        printf("%zu ", getJobControl()->jobResources->idGPUs[i]);
+    }
+    printf("\n");
+    printf(" -- Printing GPU configuration for reconfiguration (%zu): ", getJobControl()->reconfJobResources->nGPUs);
+    for(size_t i = 0; i<getJobControl()->reconfJobResources->nGPUs; i++){
+        printf("%zu ", getJobControl()->reconfJobResources->idGPUs[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    reconfigure(GPU2GPU);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    etime += (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("Reconfiguration finished in: %lf", etime);
+    fflush(stdout);
+
+
+    // wait reconfiguration
+    while(checkIfReconfiguration(getJobControl()) == 0){
+        
+        /*printf(" -- Checking reconf\n");
+        fflush(stdout);*/ 
+        sleep(1);
+    }
+
+    // print GPUs
+    printf(" -- Printing current GPU configuration (%zu): ", getJobControl()->jobResources->nGPUs);
+    for(size_t i = 0; i<getJobControl()->jobResources->nGPUs; i++){
+        printf("%zu ", getJobControl()->jobResources->idGPUs[i]);
+    }
+    printf("\n");
+    printf(" -- Printing GPU configuration for reconfiguration (%zu): ", getJobControl()->reconfJobResources->nGPUs);
+    for(size_t i = 0; i<getJobControl()->reconfJobResources->nGPUs; i++){
+        printf("%zu ", getJobControl()->reconfJobResources->idGPUs[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    reconfigure(GPU2GPU);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    etime += (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("Reconfiguration finished in: %lf", etime);
+    fflush(stdout);
+
+
+    // transfer data fron the GPUs to the CPU
+    for(i = 0; i<appData->N; i++){
+        ((float*)(appDataDTI->cpuData))[i] = 0;
+    }
+
+    transferDataGPU2CPU();
+    
+
+    for(size_t i = 0; i<appData->N; i++){
+
+        printf("%f ", appData->arr[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+    int correct = 1;
+    for(i = 0; i<appData->N; i++){
+        if( ((float*)(appDataDTI->cpuData))[i] != (float)i){
+            correct = 0;
+            break;        
+        }
+    }
+    
+    if(!correct)
+        printf(" -- [APP]: Incorrect result!!!");
+    else
+        printf(" -- [APP]: Correct results!!!!");
+
+    if(pinned)
+        cudaFreeHost(appDataDTI->cpuData);
+    else
+        free(appDataDTI->cpuData);
+
+
+    // destroy streams
+    freeDITTO();
+
+    // deallocate streams
+
+    // deallocate DITTO environment memory
+
+    // signal that job finished
+    jobFinished(getJobControl());
+
+    pthread_exit(NULL);
+}
+
+
+void launch_reconfs_test_app_new(int argc, void* argv[]){
+
+
+    size_t i;
+
+    // initialize DITTO environment
+    initDITTO(argv[argc+1]);
+
+    // APP: initialize data structure used by the application
+    appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
+    appData->N = *(size_t*)argv[0];
+    appData->s = *(size_t*)argv[1];
+    //appData->async = *(size_t*)argv[2];
+
+    // communication info
+    size_t pinned = *(size_t*)argv[2];
+    size_t async = *(size_t*)argv[3];
+    size_t steps = *(size_t*)argv[4];
+    size_t cores = *(size_t*)argv[5];
+
+    int enumValue = *(int*)argv[6];
+    reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
+
+    appData->malleable = *(size_t*)argv[argc];
+
+    // allocate memory for App Data
+    if(pinned) // pinned memory
+        cudaMallocHost(&appData->arr, appData->N * sizeof(float));
+    else
+        appData->arr = (float*)calloc(appData->N, sizeof(float));
+    
+    // initialize data
+    for(i = 0; i<appData->N; i++)
+        appData->arr[i] = (float)i;//(float)rand()/(float)(RAND_MAX);
+
+    
     // set communication type
     communicationType_t commType;
     if(pinned)
@@ -775,16 +1140,8 @@ void launch_reconf_test_app(int argc, void* argv[]){
         appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
 
 
-    for(i = 0; i<appData->N; i++){
-        ((float*)(appDataDTI->cpuData))[i] *= 2;
-    }
-
-
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
-
-
-    // update data in DTI
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -800,59 +1157,44 @@ void launch_reconf_test_app(int argc, void* argv[]){
         sleep(1);
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    reconfigure();
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    etime += (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 
-    printf(" %lf", etime);
-    fflush(stdout);
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    reconfigure(reconfDir);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    etime = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    printf("%lf\n", etime);
 
     // transfer data fron the GPUs to the CPU
-    transferDataGPU2CPU();
-    
-
-    // check correctness
-    /*int correct = 1;
     for(i = 0; i<appData->N; i++){
-        if(appData->arr[i] != (float)i){
-            correct = 0;
-            break;        
-        }
-    }*/
+        ((float*)(appDataDTI->cpuData))[i] = 0;
+    }
+
+    transferDataGPU2CPU();
 
     int correct = 1;
     for(i = 0; i<appData->N; i++){
-        if( ((float*)(appDataDTI->cpuData))[i] != 2 * (float)i){
+        if( ((float*)(appDataDTI->cpuData))[i] != (float)i){
             correct = 0;
             break;        
         }
-    }
-    
-    /*if(!correct)
+    }    
+    if(!correct)
         printf(" -- [APP]: Incorrect result!!!");
-    else
-        printf(" -- [APP]: Correct results!!!!");*/
+
 
     if(pinned)
         cudaFreeHost(appDataDTI->cpuData);
     else
         free(appDataDTI->cpuData);
 
-
     // destroy streams
     freeDITTO();
-
-    // deallocate streams
-
-    // deallocate DITTO environment memory
 
     // signal that job finished
     jobFinished(getJobControl());
 
     pthread_exit(NULL);
 }
-
 
 
 void launch_malloc_test_app(int argc, void* argv[]){
@@ -934,7 +1276,7 @@ void launch_malloc_test_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getNumberOfGPUs(), 0); // number of GPUs, old number of GPUs
+    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();

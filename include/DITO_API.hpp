@@ -6,18 +6,20 @@
 #include <stdio.h>
 
 
-// declare a type to represent userFunctions for data transmission
+// forwarded declarations
 typedef void* (*GenericFunction)(void*);
 typedef struct jobControl_t jobControl_t; // RMS communication
 typedef struct jobResources_t jobResources_t; // RMS communication
 
-/* Structures */
 
+
+/* Structures */
 // Structure with the state information
 typedef struct state_t {
 
-    // TODO: This must be jobResources
+    // Current job resources and job resources for reconfigurations copied from the RMS
     jobResources_t *jobResources;
+    jobResources_t *reconfJobResources;
 
     // function to update application state 
     GenericFunction updateState;
@@ -34,7 +36,9 @@ enum transmissionPatternsEnum {
     nonettp,
     entire,
     simple,
+    p2pSimple,
     complex,
+    p2pComplex,
     custom
 };
 
@@ -47,19 +51,21 @@ enum remainingElementsEnum {
     last
 };
 
-
+/// @brief Enumeration that indicates the memory allocation type
 enum cudaMemoryTypeEnum {
 
     pinnedComm,
     nonPinnedComm
 };
 
+/// @brief Enumeration that indicates if data distributions are synchronous or asynchronous
 enum transmissionTypeEnum {
 
     syncComm,
     asyncComm
 };
 
+/// @brief Enumeration that indicates the communication type
 enum transferStepsEnum {
 
     oneStepComm,
@@ -67,13 +73,14 @@ enum transferStepsEnum {
     stridedComm
 };
 
+/// @brief Enumeration that indicates the number of cores used for the data distribution
 enum transferCoresEnum {
 
     singleCoreComm,
     multiCoreComm
 };
 
-// description of the transmission
+/// @brief Structure that encapsulates all communication related information
 typedef struct communicationType_t {
 
     cudaMemoryTypeEnum cudaMemoryType;
@@ -82,55 +89,55 @@ typedef struct communicationType_t {
     transferCoresEnum transferCores;
 } communicationType_t;
 
-/*enum communicationTypeEnum {
+/// @brief Enumeration that indicates the data movement directions
+enum reconfDirEnum {
 
-    // syncComm: synchronous communication in two steps
-    // syncPinnedComm: synchronous communication in two steps using pinned memory
-    // syncOneStepComm: synchronous communication in one steps
-    // syncOneStepPinnedComm: synchronous communication in one step using pinned memory
-    // asyncComm: asynchronous communication (one step and pinned memory)
-    
-    syncComm,
-    syncPinnedComm,
-    asyncTwoStepComm,
-    syncOneStepComm,
-    syncOneStepPinnedComm,
-    asyncComm
-};*/
+    CPU2GPU,
+    GPU2GPU,
+    GPU2CPU,
+    CPU
+};
 
-// Structure for describing data array redistributions for simple patterns
+enum reconfTypeEnum {
+
+    expand,
+    shrink,
+    keep
+};
+
+
+/// @brief Structure for describing the pattern for distributing data
 typedef struct DTIDesctiption_t{
 
-    /* developer provided description */
-    // enumerations providing more details about the DTI
+    // transmission data
     transmissionPatternsEnum tpttEnum;
     remainingElementsEnum rmEnum;
     communicationType_t commType;
 
-    // if complex, the size of each partition
+    // the number of partitions TODO: change the variable name
     size_t s;
 
 } DTIDesctiption_t;
 
 
-/// @brief Structure to store information of how data is distributed acoss GPUs. Data (usually arrays) are divided in partitions, where each GPU receives
-/// a set of partitions
+/// @brief Structure with all the information for redistributing a data structure
 typedef struct DTI_t {
 
     // 0: automatically managed arrays, 1: manually managed
-    int type;
-    int dataLocation; // 0: cpu; 1: gpu
+    int type; // automatic (0) | manual (1)
+    int dataLocation; // CPU (0) | GPU (1)
 
-    // pointers to CPU and GPU data
-    void **gpuData; // [n_GPUS] pointers to device arrays (one per dev)
-    void *cpuData; // data array on the CPU
-    size_t N; // number of elements in the CPU array (if it is an array)
+    void **gpuData; // [n_GPUS] data structure on each GPU
+    void **prevGpuData; // [n_GPUS] data structure on each GPU for the previous configuration
+    void *cpuData; // data structure in the CPU
+    size_t N; // number of elements in the CPU array
     size_t size; // data type size
     const char *name; // name of the DTI
         
-    // user-provided functions for managing the data redistributions
-    GenericFunction moveCPU2GPU;
-    GenericFunction moveGPU2CPU;
+    // user-provided reconfiguration functions
+    GenericFunction moveCPU2GPU; // CPU2GPU
+    GenericFunction moveGPU2CPU; // GPU2CPU
+    GenericFunction moveGPU2GPU; // GPU2GPU
 
     // user-provided description of the DTI 
     DTIDesctiption_t *description;
@@ -141,37 +148,51 @@ typedef struct DTI_t {
     size_t **nPerPartition; // [nGPUs x nPartitions] number of elements on each partition per GPU
     size_t **offsetPerPartition; // [nGPUs x nPartitions] index of the first element on each partition
 
+    // data corresponding to the previous configuration
+    size_t *prev_nPerGPU; // [nGPUs] number of elements on each GPU (the sum of the elements on all partitions)
+    size_t *prev_nPartitionsPerGPU; // [nGPUs] number of partitions on each GPU
+    size_t **prev_nPerPartition; // [nGPUs x nPartitions] number of elements on each partition per GPU
+    size_t **prev_offsetPerPartition; // [nGPUs x nPartitions] index of the first element on each partition
+
 } DTI_t;
 
-// app data to communicate the scheduler and the
+/// @brief Structure that constains reconfiguration data
+typedef struct reconfData_t {
+
+    size_t **gpusToSplit; // [nGPUs]: the GPUs to move data for each GPU
+    size_t *virtualTopology; // order in which GPUs have data
+    // the number in the position of the GPUe indicates what position of the original array contains the GPU
+
+} reconf_data_t;
+
+
+/// @brief Structure that constains data of the application
 typedef struct public_APP_data_t {
 
-    // app state
+    // application state
     state_t *state;
-
-    //reconfData_t *reconfData;
+    
+    // job control (shared variable with the RMS)
     jobControl_t *jobControl; // communication with the scheduler
 
-    // streams (move in the future)
+    // CUDA streams for asynchronous data movements // TODO: this is not the ideal place for this
     cudaStream_t *cudaStreams;
 
 } public_APP_Data_t;
 
 
-
 // DITTO management data, private for each thread
 extern thread_local public_APP_data_t *appData; // app data related to DITTO (state and jobControl)
+extern thread_local reconfData_t *reconfData; // reconfiguration data
+extern thread_local size_t *virtualTopology;
 extern thread_local DTI_t** arrDTI; // array of DTIs
 extern thread_local size_t nDTI; // number of DTIs
 extern thread_local size_t maxDTI; // maximum number of DTIs
 
-
-/* [INITIALIZATION] */
-
 /// initialize DITTO environment: state, array of DTIs...
 void initDITTO(void *jobControl);
 
-/// free DITTO environment
+/// free DITTO environment TODO
 void freeDITTO();
 
 /// get Job control from the appData variable // TODO: I don't think this should be accesible
@@ -181,9 +202,6 @@ jobControl_t* getJobControl();
 /// initialize app state: number of GPUs and GPU identifiers
 state_t* initState(jobResources_t *jobResources); 
 
-/// deallocate state memory
-void freeState(state_t *state);
-
 /// get state variable from the DITTO application data
 state_t* getState();
 
@@ -192,6 +210,24 @@ state_t* updateState(state_t *state, jobControl_t *jobControl);
 
 /// store the application state
 state_t* storeState(state_t *state);
+
+/// deallocate state memory
+void freeState(state_t *state);
+
+/// update application resources after reconfiguration
+void updateApplicationResources(state_t *state);
+
+/// Copy resources dedicated to the job from the jobControl (shared variable)
+void cpyJobResourcesToState(state_t *state, jobResources_t *rmsJobResources);
+
+/// Copy resources dedicated to the job from the jobControl (shared variable)
+void cpyReconfResourcesToState(state_t *state, jobResources_t *reconfJobResources);
+
+/// @brief Copy job resources to a new structure and return it
+jobResources_t* cpyJobResources(jobResources_t *jobResources);
+
+/// @brief Deallocate job resources
+void freeJobResources(jobResources_t *jobResources);
 
 /// get the number of GPUs available for the job
 size_t getNumberOfGPUs();
@@ -205,10 +241,10 @@ cudaStream_t* getCudaStreams();
 /* [RECONFIGURATIONS] */
 
 /// Reconfigure application: move data from the GPU to the CPU, update state, reconfigure DTIs for the new available resources, and move data again to the GPU. If necessary, reconfigure kernels too
-void reconfigure();
+void reconfigure(reconfDirEnum reconfDir);
 
 /// Reconfigure DTIs for the new resources available
-void reconfigureDTIs(size_t nGPUs, size_t nOldGPUs);
+void reconfigureDTIs(jobResources_t *reconfJobResources, jobResources_t *jobResources);
 
 /// Reconfigure kernels to the new number of GPUs
 void* reconfigureKernels(GenericFunction f, void* params);
@@ -219,6 +255,9 @@ void transferDataCPU2GPU();
 /// Move DTIs data from the GPUs to the CPU
 void transferDataGPU2CPU();
 
+void transferDataGPU2GPU(reconfTypeEnum reconfEnum);
+
+
 
 /* [DTI MANAGEMENT] */
 
@@ -228,7 +267,7 @@ DTI_t* initializeDTI(size_t type, size_t dataLocation, void* cpuData, void** gpu
 void freeDTI(DTI_t *DTI, size_t nGPUs);
 
 void addDTI(DTI_t *DTI);
-void configureDTIs(size_t nGPUs, size_t nOldGPUs);
+void configureDTIs(jobResources_t *jobResources, jobResources_t *reconfJobResources, reconfDirEnum reconfDir);
 DTI_t* getDTI(const char *dtiName);
 DTI_t* getDTIByIndex(int i);
 
