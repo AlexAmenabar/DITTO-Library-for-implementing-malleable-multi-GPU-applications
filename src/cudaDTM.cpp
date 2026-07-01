@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include <cstring>
+#include <vector>
 
 #include "DTM.hpp"
 #include "DDM.hpp"
@@ -54,6 +55,30 @@ void destroyStreams(jobResources_t *jobResources){
         cudaStreamDestroy(getCudaStreams()[i]);
     } 
 }
+
+
+void initializeNCCLComm(jobResources_t *jobResources){
+
+    size_t *idGPUs = jobResources->idGPUs;
+    size_t nGPUs = jobResources->nGPUs;
+
+    std::vector<int> devs(nGPUs);
+    for (size_t i = 0; i < nGPUs; i++)
+        devs[i] = static_cast<int>(idGPUs[i]);
+
+    ncclCommInitAll(getNCCLComms(), nGPUs, devs.data());
+}
+
+void destroyNCCLComm(jobResources_t *jobResources){
+
+    size_t nGPUs = jobResources->nGPUs;
+    ncclComm_t* comms = getNCCLComms();
+
+    for (size_t i = 0; i < nGPUs; i++) {
+        ncclCommDestroy(comms[i]);
+    }
+}
+
 
 
 // TODO: revise, not used actually
@@ -1044,6 +1069,9 @@ void reconfN2N(DTI_t *DTI){
         cudaSetDevice(dstDev);
         err = cudaMalloc(&(DTI->gpuData[dstDevIndex]), DTI->nPerGPU[dstDevIndex] * sizeof(float)); 
 
+        if (err != cudaSuccess) 
+            printf("Cpy failed in expand: %s\n", cudaGetErrorString(err));
+
 
         // check and enable peer access
         int canAccess = 0;
@@ -1066,7 +1094,7 @@ void reconfN2N(DTI_t *DTI){
             size_t offDst = n * nP;
             size_t offSrc = n * nP;
 
-            //printf(" canAccess = %d from %zu to %zu: %zu elements (prev N = %zu, M = %zu)\n", canAccess, srcDev, dstDev, nElementsDst, nElements, M);
+            //printf(" canAccess = %d from %zu to %zu: %zu elements (offSrc = %zu, offDst = %zu)\n", canAccess, srcDev, dstDev, n, offSrc, offDst);
             //printf(" -- prev[%zu:%zu], post[%zu]\n", srcDev, offSrc, dstDev);
             //fflush(stdout);
 
@@ -1079,21 +1107,21 @@ void reconfN2N(DTI_t *DTI){
             // if can access, move data directly, else, use the CPU
             if (canAccess){
                 
-                // enable peer access
-                cudaDeviceEnablePeerAccess(dstDev, 0);
-
                 // cpy data directly to a temporal buffer
                 if(commType.transmissionType == asyncComm){
                     
-                    cudaMemcpyPeerAsync(dst, dstDev, src, srcDev, nBytes, cudaStreams[i]);
+                    err = cudaMemcpyPeerAsync(dst, dstDev, src, srcDev, nBytes, cudaStreams[i]);
                 }
                 else{
 
-                    cudaMemcpyPeer(dst, dstDev, src, srcDev, nBytes); // copy P2P
+                    err = cudaMemcpyPeer(dst, dstDev, src, srcDev, nBytes); // copy P2P
                     
                     // free old GPU data
                     cudaFree(DTI->prevGpuData[i]);
                 }
+
+                if (err != cudaSuccess) 
+                    printf("Cpy failed in expand: %s\n", cudaGetErrorString(err));
             }
             else if(srcDev == dstDev){
 

@@ -15,6 +15,12 @@ void initializeStreams(jobResources_t *jobResources);
 /// @brief Destroy CUDA streams
 void destroyStreams(jobResources_t *jobResources);
 
+/// @brief Create NCCL communicators
+void initializeNCCLComm(jobResources_t *jobResources);
+
+/// @brief Destroy NCCL communicators
+void destroyNCCLComm(jobResources_t *jobResources);
+
 /// @brief TODO
 void resetGPUs();
 

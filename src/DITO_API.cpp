@@ -52,6 +52,9 @@ void initDITTO(void *jobControl){
     appData->cudaStreams = (cudaStream_t*)malloc(8 * sizeof(cudaStream_t)); // 8 because we consider that it is the maximum number of GPUs we will use for now, in intra-node configurations
     initializeStreams(appData->jobControl->jobResources);
 
+    //appData->ncclComms = (ncclComm_t*)malloc(8 * sizeof(ncclComm_t));
+    //initializeNCCLComm(appData->jobControl->jobResources);
+
     // initialize DTI data
     nDTI = 0;
     maxDTI = 10;
@@ -197,6 +200,10 @@ cudaStream_t* getCudaStreams(){
     return appData->cudaStreams;
 }
 
+ncclComm_t* getNCCLComms(){
+
+    return appData->ncclComms;
+}
 
 void reconfigure(reconfDirEnum reconfDir){
 
@@ -284,6 +291,10 @@ void reconfigure(reconfDirEnum reconfDir){
     // destroy old streams and initialize new ones
     destroyStreams(jobResources);
     initializeStreams(reconfJobResources);
+
+    // destroy and create NCCL communicator
+    //destroyNCCLComm(jobResources);
+    //initializeNCCLComm(jobResources);
 
     // update state
     updateState(state, jobControl);

@@ -219,7 +219,7 @@ int reconfs_workload(schInfo_t *schInfo){
                     jobLauncher->appType = 2;
                     jobLauncher->argc = 6;
                     jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
-                    jobLauncher->launchFunc = &launch_reconf_test_app;
+                    jobLauncher->launchFunc = &launch_reconfs_test_app_new;
                     
                     printf(" [%s, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], nBytes, nBytes * sizeof(float), gpus, gpus);
                     fflush(stdout);
@@ -356,7 +356,7 @@ int coalescending_reconfs_workload(schInfo_t *schInfo){
                         jobLauncher->appType = 2;
                         jobLauncher->argc = 6;
                         jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
-                        jobLauncher->launchFunc = &launch_reconf_test_app;
+                        jobLauncher->launchFunc = &launch_reconfs_test_app_new;
                         
                         printf(" [%s, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], arrN[N], arrN[N] * sizeof(float), arrPartitions[nP], gpus);
                         fflush(stdout);
@@ -595,7 +595,7 @@ int reconfs_workload_definitive(schInfo_t *schInfo){
                         jobLauncher->appType = 2;
                         jobLauncher->argc = 6;
                         jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
-                        jobLauncher->launchFunc = &launch_reconf_test_app;
+                        jobLauncher->launchFunc = &launch_reconfs_test_app_new;
                         
                         // print: communicationMode, total elements in array, partition size, number of partitions, number of GPUs
                         printf(" [%s, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], ja, jS, arrPartitions[nP], gpus);
@@ -740,7 +740,7 @@ int reconfs_workload_GPU2GPU_expand(schInfo_t *schInfo){
                             jobLauncher->appType = 2;
                             jobLauncher->argc = 6;
                             jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
-                            jobLauncher->launchFunc = &launch_reconf_test_app;
+                            jobLauncher->launchFunc = &launch_reconfs_test_app_new;
 
                             printf(" -- [RMS]: [%s, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], ja, jS, arrPartitions[nP], gpus);
                             fflush(stdout);
@@ -891,7 +891,7 @@ int reconfs_workload_GPU2GPU_shrink(schInfo_t *schInfo){
                             jobLauncher->appType = 2;
                             jobLauncher->argc = 6;
                             jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
-                            jobLauncher->launchFunc = &launch_reconf_test_app;
+                            jobLauncher->launchFunc = &launch_reconfs_test_app_new;
                             
                             // print: communicationMode, total elements in array, partition size, number of partitions, number of GPUs
                             printf(" -- [RMS]: [%s, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], ja, jS, arrPartitions[nP], gpus);
@@ -1034,7 +1034,7 @@ int reconfs_workload_N2N(schInfo_t *schInfo){
                             jobLauncher->appType = 2;
                             jobLauncher->argc = 6;
                             jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
-                            jobLauncher->launchFunc = &launch_reconf_test_app;
+                            jobLauncher->launchFunc = &launch_reconfs_test_app_new;
                             
                             // print: communicationMode, total elements in array, partition size, number of partitions, number of GPUs
                             //printf(" [%s, %zu, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], N * arrPartitions[nP] * gpus * sizeof(float), N * sizeof(float), arrPartitions[nP], gpus, reconfGPUs);
@@ -2138,7 +2138,7 @@ int reconfKeepEval2(schInfo_t *schInfo, size_t nGPUs){
     // argv for the input of the application
     void* jargs[9];
 
-    for(size_t gpus = 2; gpus <= nGPUs; gpus *= 2){
+    for(size_t gpus = 1; gpus <= nGPUs; gpus *= 2){
 
         for(size_t nP = 0; nP<nPartitions; nP++){
 
@@ -2191,10 +2191,11 @@ int reconfKeepEval2(schInfo_t *schInfo, size_t nGPUs){
                         jobLauncher->launchFunc = &launch_reconfs_test_app_new;
 
 
+
                         printf(" [%s, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], ja, jS, arrPartitions[nP], gpus);
                         addPendingJob(jobLauncher); // add to pending list
                         launchJob(getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources); // launch from pending list
-
+       
                         // get job control
                         jobControl_t *jobControl = getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl;
                         
@@ -2802,23 +2803,23 @@ int main(int argc, char* argv[]){
 
     // EXPERIMENTS
 
-    printf("\n\n\n[CPU]\n");
-    reconfCPUEval(schInfo);
+    //printf("\n\n\n[CPU]\n");
+    //reconfCPUEval(schInfo);
 
-    printf("\n\n\n[EXPAND]\n");
-    reconfExpandEval(schInfo, schInfo->nGPUs);
+    //printf("\n\n\n[EXPAND]\n");
+    //reconfExpandEval(schInfo, schInfo->nGPUs);
 
-    printf("\n\n\n[EXPAND DIFF]\n");
-    reconfExpandEval2(schInfo, 4);
+    //printf("\n\n\n[EXPAND DIFF]\n");
+    //reconfExpandEval2(schInfo, 4);
 
-    printf("\n\n\n[SHRINK]\n");
-    reconfShrinkEval(schInfo, schInfo->nGPUs);
+    //printf("\n\n\n[SHRINK]\n");
+    //reconfShrinkEval(schInfo, schInfo->nGPUs);
 
-    printf("\n\n[SHRINK DIFF]\n");
-    reconfShrinkEval2(schInfo, 4);
+    //printf("\n\n[SHRINK DIFF]\n");
+    //reconfShrinkEval2(schInfo, 4);
 
     printf("\n\n[KEEP DIFF]\n");
-    reconfKeepEval2(schInfo, 4);
+    reconfKeepEval2(schInfo, 8);
 
     // TOPOLOGY_AWARE
     printf("\n\n\n[EXPAND TOPO]\n");

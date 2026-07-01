@@ -4,6 +4,8 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <stdio.h>
+#include <nccl.h>
+
 
 
 // forwarded declarations
@@ -177,6 +179,7 @@ typedef struct public_APP_data_t {
 
     // CUDA streams for asynchronous data movements // TODO: this is not the ideal place for this
     cudaStream_t *cudaStreams;
+    ncclComm_t *ncclComms;
 
 } public_APP_Data_t;
 
@@ -236,6 +239,8 @@ size_t getNumberOfGPUs();
 size_t* getGPUIds();
 
 cudaStream_t* getCudaStreams();
+
+ncclComm_t* getNCCLComms();
 
 
 /* [RECONFIGURATIONS] */

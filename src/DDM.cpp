@@ -351,7 +351,7 @@ void configureShrink(jobResources_t *reconfJobResources, jobResources_t *jobReso
                     // get the GPU id
                     size_t srcGPU = virtualTopology[l];
 
-                    // find the GPU in the array of GPUs
+                    // find the GPU in the array of GPUs (we know that it is)
                     size_t indexGPU = 0;
                     while(srcGPU != idGPUs[indexGPU]){
                         indexGPU++;
@@ -422,7 +422,7 @@ void configureShrink(jobResources_t *reconfJobResources, jobResources_t *jobReso
                 // get the GPU id
                 size_t srcGPU = virtualTopology[l];
 
-                // find the GPU in the array of GPUs
+                // find the GPU in the array of GPUs (we know that it is)
                 size_t indexGPU = 0;
                 while(srcGPU != idGPUs[indexGPU]){
                     indexGPU++;
@@ -506,7 +506,7 @@ void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResourc
 
         // try to find the GPU
         j = 0;
-        while(srcGPU != idReconfGPUs[j])
+        while(j < nGPUs && srcGPU != idReconfGPUs[j])
             j++;
 
         // found
@@ -529,7 +529,7 @@ void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResourc
         if(!selectedGPUs[i]){
 
             size_t aff = 9999999;
-            size_t bIndex;
+            size_t bIndex = 0;
 
             // loop over reconfiguration GPUs and find a not selected one
             for(j = 0; j<nGPUs; j++){
@@ -577,7 +577,7 @@ void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResourc
 
     //printf(" [APP]: Splitting information:\n");
     //for(i = 0; i<nGPUs; i++){
-
+//
     //    printf(" -- GPU %zu (%zu): %zu\n", idGPUs[i], i, gpusToSplit[i][0]);
     //}
     //printf("\n");

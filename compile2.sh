@@ -1,0 +1,1 @@
+bnd run --devel nvcc -O2 -g -Iinclude -Isrc testApps/toy_app_malleable.cpp src/DITO_API.cpp src/DDM.cpp src/cudaDTM.cpp src/RMS.cpp src/jobQueue.cpp src/eventQueue.cpp src/RCF.cpp src/SCH.cpp testApps/toy_app_malleable.cu src/main.cpp -Xcompiler -fopenmp -o bin/ncclTest -lpthread  -lnvidia-ml -lnccl
