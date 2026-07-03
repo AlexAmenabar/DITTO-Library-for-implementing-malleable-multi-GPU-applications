@@ -6,12 +6,17 @@ typedef struct appStruct_t {
 
     // iterative application
     float *arr;
+    size_t *indexArr;
     char *charArr;
     size_t N;
     size_t T;
     size_t K;
     size_t cpuK;
     size_t s;
+
+
+    float *gValues; // graph values
+    size_t **indices;
 
     // iterative application with phases
     size_t P;
@@ -42,5 +47,6 @@ void launch_reconf_test_app(int argc, void* argv[]);
 void launch_malloc_test_app(int argc, void* argv[]);
 
 void launch_reconfs_test_app_new(int argc, void* argv[]);
+void launch_NCCL_communications_app(int argc, void* argv[]);
 
 // test communication application

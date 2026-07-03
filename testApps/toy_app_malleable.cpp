@@ -495,6 +495,12 @@ void simulateIterativeNCCL(appStruct_t *data){
 }
 
 
+void simulateIterativeUnifiedMemory(appStruct_t *data){
+
+
+
+}
+
 /* Application MAIN functions */
 
 
@@ -568,7 +574,7 @@ void launch_iterative_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -673,7 +679,7 @@ void launch_phases_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -770,7 +776,7 @@ void launch_communications_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -816,6 +822,7 @@ void launch_communications_app(int argc, void* argv[]){
 }
 
 
+// pending for being tested
 void launch_NCCL_communications_app(int argc, void* argv[]){
 
     size_t i;
@@ -887,7 +894,7 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();
@@ -904,8 +911,6 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
         pthread_mutex_unlock(&(getJobControl()->lockStartRunning));
     }
 
-    printf(" -- Running\n");
-    fflush(stdout);
 
 
     // wait for signal before starting
@@ -932,6 +937,110 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
     pthread_exit(NULL);
 }
 
+
+// pending for being tested
+void launch_Unified_memory_app(int argc, void* argv[]){
+
+
+    size_t i;
+
+    // initialize DITTO environment
+    // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
+    initDITTO(argv[argc+1]);
+
+    appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
+    appData->N = *(size_t*)argv[0];
+    appData->T = *(size_t*)argv[1];
+    appData->K = *(size_t*)argv[2];
+    appData->nIterationsForCommunications = *(size_t*)argv[3];
+    appData->s = *(size_t*)argv[4];
+
+    // communication info
+    size_t pinned = *(size_t*)argv[5];
+    size_t async = *(size_t*)argv[6];
+    size_t steps = *(size_t*)argv[7];
+    size_t cores = *(size_t*)argv[8];
+    
+    int enumValue = *(int*)argv[9];
+    reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
+
+    appData->malleable = *(size_t*)argv[argc];
+
+
+    // 
+    size_t N = appData->N;
+    size_t nGPUs = getState()->jobResources->nGPUs;
+
+
+    // allocate unifed memory
+    cudaMallocManaged((void**)&(appData->gValues), N * sizeof(float));
+
+    // temporal memory
+    size_t **indices = (size_t**)calloc(nGPUs, sizeof(size_t*));
+    size_t *n = (size_t*)calloc(N, sizeof(size_t));
+
+    //for(i = 0; i<getState()->jobResources->nGPUs; i++){
+
+    //    indices[i] = 
+    //    for(size_t j = 0; j<appData->N / )
+    //}
+
+
+    // create indices
+    //for(size_t g = 0; g<getState()->jobResources->nGPUs; g++){
+
+
+    //}
+
+
+    //
+    //cudaMallocManaged((void**)&(appData->indices), appData->N)
+
+    // each GPU will write from [i * N] to [(i + 1) * N], being i the GPU index
+
+    // set communication type
+    communicationType_t commType;
+    if(pinned)
+        commType.cudaMemoryType = pinnedComm;
+    else 
+        commType.cudaMemoryType = nonPinnedComm;
+
+    if(async)
+        commType.transmissionType = asyncComm;
+    else
+        commType.transmissionType = syncComm;
+    
+    if(steps == 0)
+        commType.transferSteps = oneStepComm;
+    else if(steps == 1)
+        commType.transferSteps = twoStepsComm;
+    else
+        commType.transferSteps = stridedComm;
+
+    if(cores)
+        commType.transferCores = multiCoreComm;
+    else
+        commType.transferCores = singleCoreComm;
+
+
+    // wait for signal before starting
+    simulateIterativeUnifiedMemory(appData);
+
+    // transfer data fron the GPUs to the CPU
+    //transferDataGPU2CPU();
+
+    //printf(" [RES]: %zu bytes; from %zu to %zu; %lf %lf\n", 
+    //        appData->N * sizeof(float), getGPUIds()[0], getGPUIds()[1], appData->communicationTimeSrcDst, appData->communicationTimeDstSrc);
+
+
+    // destroy streams
+    freeDITTO();
+
+    // signal that job finished
+    jobFinished(getJobControl());
+
+    pthread_exit(NULL);
+}
 
 // [SPECIFIC APPLICATIONS FOR EVALUATING MORE CONCRETE THINGS]
 
@@ -1141,7 +1250,7 @@ void launch_malloc_test_app(int argc, void* argv[]){
 
 
     // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getJobControl()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
+    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
 
     // send data to the GPU
     transferDataCPU2GPU();

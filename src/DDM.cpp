@@ -324,6 +324,7 @@ void configureShrink(jobResources_t *reconfJobResources, jobResources_t *jobReso
         // find the index of the GPU in the virtual topology
         size_t inVrt = 0;
 
+        j = 0;
         while(j < nGPUs && !inVrt){
 
             if(dstGPU == virtualTopology[j]){
@@ -509,7 +510,7 @@ void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResourc
         while(j < nGPUs && srcGPU != idReconfGPUs[j])
             j++;
 
-        // found
+        // if found
         if(j < nGPUs){
 
             gpusToSplit[i][0] = srcGPU;
@@ -561,13 +562,16 @@ void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResourc
 
             // loop over reconfiguration GPUs and find a not selected one
             j = 0;
-            while(selectedReconfGPUs[j]){
+            while(j<nGPUs && selectedReconfGPUs[j]){
                 j++;
             }
 
-            gpusToSplit[i][0] = idReconfGPUs[j];
-            selectedGPUs[i] = 1;
-            selectedReconfGPUs[j] = 1;
+            if(j<nGPUs){
+        
+                gpusToSplit[i][0] = idReconfGPUs[j];
+                selectedGPUs[i] = 1;
+                selectedReconfGPUs[j] = 1;
+            }
         }
     }
 
@@ -1025,7 +1029,7 @@ void configureSimpleN2NTransmission(DTI_t *DTI, jobResources_t *reconfJobResourc
         // get i.th GPU in the virtual topology (that defines the order of the data structure)
         size_t srcGPU = virtualTopology[i];
 
-        // find the GPU in the array of current GPU configuration
+        // find the GPU in the array of current GPU configuration (we know the GPU is in the array)
         size_t indexGPU = 0;
         while(idGPUs[indexGPU] != srcGPU){
 
@@ -1047,7 +1051,7 @@ void configureSimpleN2NTransmission(DTI_t *DTI, jobResources_t *reconfJobResourc
         size_t gpu = newVirtualTopology[i];
         size_t gpuIndex = 0;
 
-        // get GPU index in the array of reconfiguration GPUs
+        // get GPU index in the array of reconfiguration GPUs (we know the GPU is in the array)
         while(idReconfGPUs[gpuIndex] != gpu){
 
             gpuIndex++;

@@ -260,7 +260,6 @@ void reconfigure(reconfDirEnum reconfDir){
         tConf += (endConf.tv_sec - startConf.tv_sec) + (endConf.tv_nsec - startConf.tv_nsec) / 1e9;
     }
     
-
     // if it goes through the CPU, move data to the CPU first
     if(reconfDir != GPU2GPU){
 
@@ -278,7 +277,6 @@ void reconfigure(reconfDirEnum reconfDir){
     configureDTIs(jobResources, reconfJobResources, reconfDir);
     clock_gettime(CLOCK_MONOTONIC, &endConf);
     tConf += (endConf.tv_sec - startConf.tv_sec) + (endConf.tv_nsec - startConf.tv_nsec) / 1e9;
-
 
     // perform data redistributions (DTM)
     if(reconfDir == GPU2GPU){

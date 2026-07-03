@@ -1431,7 +1431,7 @@ int reconfCPUEval(schInfo_t *schInfo){
                         // wait until the reconfiguration finishes and finish it
 
                         while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                            sleep(0.1);
+                            sleep(1);
                         }
                         jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -1562,7 +1562,7 @@ int reconfExpandEval(schInfo_t *schInfo, size_t nGPUs){
                             // wait until the reconfiguration finishes and finish it
 
                             while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                                sleep(0.1);
+                                sleep(1);
                             }
                             jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -1693,7 +1693,7 @@ int reconfExpandEval2(schInfo_t *schInfo, size_t nGPUs){
                             // wait until the reconfiguration finishes and finish it
 
                             while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                                sleep(0.1);
+                                sleep(1);
                             }
                             jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -1824,7 +1824,7 @@ int reconfShrinkEval(schInfo_t *schInfo, size_t nGPUs){
                             // wait until the reconfiguration finishes and finish it
 
                             while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                                sleep(0.1);
+                                sleep(1);
                             }
                             jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -1954,7 +1954,7 @@ int reconfShrinkEval2(schInfo_t *schInfo, size_t nGPUs){
                             // wait until the reconfiguration finishes and finish it
 
                             while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                                sleep(0.1);
+                                sleep(1);
                             }
                             jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -2084,7 +2084,7 @@ int reconfKeepEval(schInfo_t *schInfo, size_t nGPUs){
                         // wait until the reconfiguration finishes and finish it
 
                         while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                            sleep(0.1);
+                            sleep(1);
                         }
                         jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -2114,12 +2114,12 @@ int reconfKeepEval(schInfo_t *schInfo, size_t nGPUs){
 
 int reconfKeepEval2(schInfo_t *schInfo, size_t nGPUs){
 
-    size_t nCommunicationModes = 4;
-    const char *communicationModes[4] = {"OASYNC", "OCASYNC", "SASYNC", "SCASYNC"};
-    const size_t async[4] =  {1, 1, 1, 1};
-    const size_t pinned[4] = {0, 0, 0, 0};
-    const size_t steps[4] =  {0, 0, 2, 2};
-    const size_t cores[4] =  {0, 1, 0, 1};
+    size_t nCommunicationModes = 2;
+    const char *communicationModes[2] = {"OASYNC", "OCASYNC"};
+    const size_t async[2] =  {1, 1};
+    const size_t pinned[2] = {0, 0};
+    const size_t steps[2] =  {0, 0};
+    const size_t cores[2] =  {0, 1};
 
     // weak scalability
     size_t minN = (size_t)1024 * (size_t)1024 / (size_t)4;
@@ -2149,7 +2149,7 @@ int reconfKeepEval2(schInfo_t *schInfo, size_t nGPUs){
                     for(size_t rep = 0; rep<nRepetitions; rep++){
                     
                         size_t N = arrayN[iN] / (size_t)4;
-                    
+
                         // set job resources for experiment
                         jobResources_t *jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
                         jobResources->nGPUs = gpus;
@@ -2212,7 +2212,7 @@ int reconfKeepEval2(schInfo_t *schInfo, size_t nGPUs){
                         // wait until the reconfiguration finishes and finish it
 
                         while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                            sleep(0.1);
+                            sleep(1);
                         }
                         jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -2358,7 +2358,8 @@ int reconfExpandEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
 
 
                         printf(" [%s, %zu, %zu, %zu, %zu]: ", communicationModes[commMode], ja, jS, arrPartitions[nP], rec);
-                        addPendingJob(jobLauncher); // add to pending list
+
+                        addPendingJob(jobLauncher); // add to pending list                        
                         launchJob(getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources); // launch from pending list
 
                         // get job control
@@ -2373,7 +2374,7 @@ int reconfExpandEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
                         // wait until the reconfiguration finishes and finish it
 
                         while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                            sleep(0.1);
+                            sleep(1);
                         }
                         jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -2388,13 +2389,12 @@ int reconfExpandEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
                         removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
 
 
-                        if(jobControl->jobResources){
-                            free(jobControl->jobResources->idGPUs);
-                            free(jobControl->jobResources);
-                        }
+                        //if(jobControl->jobResources){
+                        //    free(jobControl->jobResources->idGPUs);
+                        //    free(jobControl->jobResources);
+                        //}
                     }
                 }
-                fflush(stdout);
             }
         }
     }
@@ -2514,7 +2514,7 @@ int reconfShrinkEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
                         // wait until the reconfiguration finishes and finish it
 
                         while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                            sleep(0.1);
+                            sleep(1);
                         }
                         jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -2529,10 +2529,10 @@ int reconfShrinkEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
                         removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
 
 
-                        if(jobControl->jobResources){
-                            free(jobControl->jobResources->idGPUs);
-                            free(jobControl->jobResources);
-                        }
+                        //if(jobControl->jobResources){
+                        //    free(jobControl->jobResources->idGPUs);
+                        //    free(jobControl->jobResources);
+                        //}
                     }
                 }
                 fflush(stdout);
@@ -2545,12 +2545,12 @@ int reconfShrinkEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
 
 int reconfKeepEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
 
-    size_t nCommunicationModes = 4;
-    const char *communicationModes[4] = {"OASYNC", "OCASYNC", "SASYNC", "SCASYNC"};
-    const size_t async[4] =  {1, 1, 1, 1};
-    const size_t pinned[4] = {0, 0, 0, 0};
-    const size_t steps[4] =  {0, 0, 2, 2};
-    const size_t cores[4] =  {0, 1, 0, 1};
+    size_t nCommunicationModes = 2;
+    const char *communicationModes[2] = {"OASYNC", "OCASYNC"};
+    const size_t async[2] =  {1, 1};
+    const size_t pinned[2] = {0, 0};
+    const size_t steps[2] =  {0, 0};
+    const size_t cores[2] =  {0, 1};
 
     // weak scalability
     size_t minN = (size_t)1024 * (size_t)1024 / (size_t)4;
@@ -2667,7 +2667,7 @@ int reconfKeepEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
                         // wait until the reconfiguration finishes and finish it
 
                         while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
-                            sleep(0.1);
+                            sleep(1);
                         }
                         jobFinishedReconfiguration(getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
 
@@ -2682,10 +2682,10 @@ int reconfKeepEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
                         removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
 
 
-                        if(jobControl->jobResources){
-                            free(jobControl->jobResources->idGPUs);
-                            free(jobControl->jobResources);
-                        }
+                        //if(jobControl->jobResources){
+                        //    free(jobControl->jobResources->idGPUs);
+                        //    free(jobControl->jobResources);
+                        //}
                     }
                 }
                 fflush(stdout);
@@ -2694,6 +2694,161 @@ int reconfKeepEvalTopologyAware(schInfo_t *schInfo, size_t nGPUs){
     }
     return 1;
 }
+
+
+int ncclCommunicationOverhead(schInfo_t *schInfo, size_t nGPUs){
+
+
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+
+    size_t nN = 1;
+    size_t arrayN[nN] = {(size_t)1048576 * (size_t)1024}; // 1GB
+
+    size_t N = (size_t)1048576 * (size_t)1024;
+    size_t T = 10000;
+    size_t P = 5;
+    size_t p[P] = {10000, 1000, 100, 10, 1};
+    size_t K = 10;
+
+    size_t nRepetitions = 10;
+
+
+    size_t nConfigurations = 7;
+    jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
+    
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 2;
+    jobResources[0]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+    jobResources[0]->idGPUs[1] = 1;
+  
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 2;
+
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 2;
+    jobResources[2]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 0;
+    jobResources[2]->idGPUs[1] = 4;
+
+    jobResources[3] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[3]->nGPUs = 4;
+    jobResources[3]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[3]->idGPUs[0] = 0;
+    jobResources[3]->idGPUs[1] = 1;
+    jobResources[3]->idGPUs[2] = 2;
+    jobResources[3]->idGPUs[3] = 3;
+
+    jobResources[4] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[4]->nGPUs = 4;
+    jobResources[4]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[4]->idGPUs[0] = 0;
+    jobResources[4]->idGPUs[1] = 1;
+    jobResources[4]->idGPUs[2] = 4;
+    jobResources[4]->idGPUs[3] = 5;
+
+    jobResources[5] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[5]->nGPUs = 4;
+    jobResources[5]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[5]->idGPUs[0] = 0;
+    jobResources[5]->idGPUs[1] = 2;
+    jobResources[5]->idGPUs[2] = 4;
+    jobResources[5]->idGPUs[3] = 6;
+
+    jobResources[6] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[6]->nGPUs = 8;
+    jobResources[6]->idGPUs = (size_t*)calloc(8, sizeof(size_t));
+    jobResources[6]->idGPUs[0] = 0;
+    jobResources[6]->idGPUs[1] = 1;
+    jobResources[6]->idGPUs[2] = 2;
+    jobResources[6]->idGPUs[3] = 3;
+    jobResources[6]->idGPUs[4] = 4;
+    jobResources[6]->idGPUs[5] = 5;
+    jobResources[6]->idGPUs[6] = 6;
+    jobResources[6]->idGPUs[7] = 7;
+
+    // argv for the input of the application
+    void* jargs[12];
+
+    for(size_t rec = 1; rec < nConfigurations; rec++){
+                    
+        for(size_t iP = 0; iP < P; iP++){
+            
+            for(size_t rep = 0; rep<nRepetitions; rep++){
+                                                
+                // weak scalability
+                size_t ja = N; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                size_t jT = T;
+                size_t jK = K;
+                size_t jP = p[iP];
+                size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+                // communication method
+                size_t jPinned = pinned[0];
+                size_t jAsync = async[0];
+                size_t jSteps = steps[0];
+                size_t jCores = cores[0];
+                int jReconfDir = 1;
+                size_t jmall = 1;
+
+                jargs[0] = &ja;
+                jargs[1] = &jT;
+                jargs[2] = &jK;
+                jargs[3] = &jP;
+                jargs[4] = &jS;
+                jargs[5] = &jPinned;
+                jargs[6] = &jAsync; // async
+                jargs[7] = &jSteps;
+                jargs[8] = &jCores;
+                jargs[9] = &jReconfDir;
+                jargs[10] = &jmall;
+
+                // launch job
+                jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+                jobLauncher->jobType = MALLEABLE;
+                jobLauncher->jobPriority = LOW;
+                jobLauncher->nReqGPUs = 8; // no matter
+                jobLauncher->nReqMinGPUs = 1;
+                jobLauncher->launchTimeStep = 1; // no matter
+                jobLauncher->appType = 2; // no matter
+                jobLauncher->argc = 10;
+                jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                jobLauncher->launchFunc = &launch_NCCL_communications_app;
+
+
+                printf(" [%zu, %zu, %zu, %zu, %zu]: ", ja, jT, jK, jP, rec);
+                addPendingJob(jobLauncher); // add to pending list
+                launchJob(getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[rec]); // launch from pending list
+                
+                // notify the job to start running
+                notifyStartRunning(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl);
+
+                // wait until job finishes and finish job
+                while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                    sleep(1);
+                }
+
+                finishJob(getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+                removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+            }
+
+            fflush(stdout);
+        }
+    }
+    return 1;
+}
+
+
 
 
 int main(int argc, char* argv[]){
@@ -2803,33 +2958,51 @@ int main(int argc, char* argv[]){
 
     // EXPERIMENTS
 
-    //printf("\n\n\n[CPU]\n");
-    //reconfCPUEval(schInfo);
+    printf("\n\n\n[CPU]\n");
+    fflush(stdout);
+    reconfCPUEval(schInfo);
 
-    //printf("\n\n\n[EXPAND]\n");
-    //reconfExpandEval(schInfo, schInfo->nGPUs);
+    printf("\n\n\n[EXPAND]\n");
+    fflush(stdout);
+    reconfExpandEval(schInfo, schInfo->nGPUs);
 
-    //printf("\n\n\n[EXPAND DIFF]\n");
-    //reconfExpandEval2(schInfo, 4);
+    printf("\n\n\n[EXPAND DIFF]\n");
+    fflush(stdout);
+    reconfExpandEval2(schInfo, 4);
 
-    //printf("\n\n\n[SHRINK]\n");
-    //reconfShrinkEval(schInfo, schInfo->nGPUs);
+    printf("\n\n\n[SHRINK]\n");
+    fflush(stdout);
+    reconfShrinkEval(schInfo, schInfo->nGPUs);
 
-    //printf("\n\n[SHRINK DIFF]\n");
-    //reconfShrinkEval2(schInfo, 4);
+    printf("\n\n[SHRINK DIFF]\n");
+    fflush(stdout);
+    reconfShrinkEval2(schInfo, 4);
 
+    // EXECUTE AFTER THIS
     printf("\n\n[KEEP DIFF]\n");
+    fflush(stdout);
     reconfKeepEval2(schInfo, 8);
 
     // TOPOLOGY_AWARE
     printf("\n\n\n[EXPAND TOPO]\n");
+    fflush(stdout);
     reconfExpandEvalTopologyAware(schInfo, 4);
 
     printf("\n\n\n[SHRINK TOPO]\n");
+    fflush(stdout);
     reconfShrinkEvalTopologyAware(schInfo, 4);
 
     printf("\n\n\n[KEEP TOPO]\n");
+    fflush(stdout);
     reconfKeepEvalTopologyAware(schInfo, 4);
+
+
+
+    // COMMUNICATION OVERHEAD ANALYSIS
+    //printf("\n\n\n[COMMUNICATION OVERHEAD]\n");
+    //fflush(stdout);
+    //ncclCommunicationOverhead(schInfo, 8);
+
 
     // especialized experiments (require to comment the previous line, the jobManager thread)
     //malloc_test(schInfo); // memory allocation vs pinned memory allocation
@@ -3300,6 +3473,10 @@ int main(int argc, char* argv[]){
     fprintf(fOutput, "%zu %lf %lf %lf %lf %lf %lf %d\n", 
             jobsTimeline->nJobs, totalTime, meanTotal, meanWait, meanRun, (double)((double)usageGPUs / (double)registeredUsages), usagePower, timer);
     fflush(fOutput);*/
+
+
+    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
+    double totalTime = (endTimer.tv_sec - startTimer.tv_sec) + (endTimer.tv_nsec - startTimer.tv_nsec) / 1e9;
 }
 
 
