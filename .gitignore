@@ -65,7 +65,7 @@ Mkfile.old
 dkms.conf
 experiments/communicationsExperiments/
 experiments/
-bin/
+/bin/
 
 # debug information files
 *.dwo

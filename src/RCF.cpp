@@ -12,6 +12,7 @@
 #include "eventQueue.hpp"
 
 
+// Reconfiguration policy: reconfigure any job that does not meet the established utilization conditions
 void utilization(schInfo_t *schInfo){
 
     // helper variables
@@ -19,13 +20,13 @@ void utilization(schInfo_t *schInfo){
     jobLauncher_t *jobLauncher;
     jobResources_t *jobResources;
     jobMonitoring_t *jobMonitor;
-    size_t jobType, iJob, nRunningJobs, nJobsFinished = 0;
+    size_t jobType, iJob, nRunningJobs;
 
     // get queue of running jobs
     jobQueue_t *runningQueue = &(schInfo->runningJobs);
 
 
-    // manage running jobs: whether it finished or it needs a reconfiguration
+    // loop over running jobs and make reconfiguration decisions
     nRunningJobs = getNumberOfJobsInQueue(&(schInfo->runningJobs));
     for(iJob = 0; iJob<nRunningJobs; iJob++){
 
@@ -36,68 +37,29 @@ void utilization(schInfo_t *schInfo){
         jobType = jobLauncher->jobType;
 
 
-        // JOB FINISH MANAGEMENT
-        // check whether the job finished
-        /*char jobFinished = checkJobFinished(job->jobControl);
-
-        // check if job finished
-        if(jobFinished){
-        
-            // finish job
-            finishJob(job, iJob);
-
-            // deallocate resources
-            deallocateResources(schInfo, jobResources);
-
-                
-            // free job resources (should be a function?) [TODO]
-            //free(jobResources->idGPUs);
-            //free(jobResources);
-            //free(jobControl->prevJobResources->idGPUs);
-            //free(jobControl->prevJobResources);
-            //
-            //free(job->jobControl);
-            //
-            //free(job->jobLauncher->argv);
-            //free(job->jobLauncher);
-            
-            // [TODO]: free job pointers (jobControl, job, jobLauncher...)
-
-            printf(" -- [RMS] Job %zu finished\n", job->jobId);
-            fflush(stdout);
-
-
-            nJobsFinished ++;
-            nRunningJobs --;
-            iJob--;
-        }*/
-
-        // if job not finished and job is malleable or flexible, check for reconfigurations [RECONFIGURATION POLICY]
-        //else 
-        
-
-
+        // REVISE MONITOR
         // TODO: manage the case in which job finished
+        // [Code here]
+
         // check only if job can be reconfigured (malleable | flexible)
         if (jobType > 1){ 
 
             // get job monitor
             jobMonitor = job->jobMonitor;
-            size_t step = jobMonitor->step; // current step
-
-            // circular array
-            step = jobMonitor->step % jobMonitor->steps;
+            size_t step = jobMonitor->step % jobMonitor->steps; // current step
 
             // collect information monitored by the monitoring thread // TODO: probably it is mandatory to add locks
             for(size_t jobGPU = 0; jobGPU < job->jobControl->jobResources->nGPUs; jobGPU++){
 
+                size_t gpuIndex = job->jobControl->jobResources->idGPUs[jobGPU];
+
                 // store results for computing the mean
 
                 // store results of the current time step
-                jobMonitor->gpuUsage[jobGPU][step] = schInfo->gpuUtilization[job->jobControl->jobResources->idGPUs[jobGPU]][0];
-                jobMonitor->gpuTemperature[jobGPU][step] = schInfo->gpuTemperature[job->jobControl->jobResources->idGPUs[jobGPU]][0];
-                jobMonitor->gpuEnergyConsumption[jobGPU][step] = schInfo->gpuPower[job->jobControl->jobResources->idGPUs[jobGPU]][0];
-                jobMonitor->gpuPCIeThroughput[jobGPU][step] = schInfo->gpuPCIeThroughput[job->jobControl->jobResources->idGPUs[jobGPU]][0];
+                jobMonitor->gpuUsage[jobGPU][step] = schInfo->gpuUtilization[gpuIndex][0];
+                jobMonitor->gpuTemperature[jobGPU][step] = schInfo->gpuTemperature[gpuIndex][0];
+                jobMonitor->gpuEnergyConsumption[jobGPU][step] = schInfo->gpuPower[gpuIndex][0];
+                jobMonitor->gpuPCIeThroughput[jobGPU][step] = schInfo->gpuPCIeThroughput[gpuIndex][0];
             }
             
             // update step

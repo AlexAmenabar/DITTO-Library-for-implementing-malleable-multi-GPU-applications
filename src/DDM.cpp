@@ -21,12 +21,9 @@
 
 void configureDTI(DTI_t *DTI, jobResources_t *jobResources, jobResources_t *reconfJobResources, reconfDirEnum reconfDir){
 
-    size_t i, j;
-    DTIDesctiption_t *description = DTI->description;
     size_t nGPUs = jobResources->nGPUs; 
     size_t nReconfGPUs = 0; 
     
-
     if(DTI->type == 0){
 
         // if reconfiguration goes from GPUs to GPUs
@@ -211,8 +208,6 @@ void configureExpansion(jobResources_t *reconfJobResources, jobResources_t *jobR
     for(i = 0; i<nGPUs; i++){
 
         // id of the source GPU
-        size_t srcGPU = idGPUs[i];
-
         size_t nextIndex = 0;
         while(nSelectedGPUs[i] < D){
 
@@ -285,7 +280,7 @@ void configureExpansion(jobResources_t *reconfJobResources, jobResources_t *jobR
 
 void configureShrink(jobResources_t *reconfJobResources, jobResources_t *jobResources){
     
-    size_t i, j, f;
+    size_t i, j;
 
     // get current and reconfiguration resources
     size_t *idGPUs = jobResources->idGPUs;
@@ -482,7 +477,7 @@ void configureShrink(jobResources_t *reconfJobResources, jobResources_t *jobReso
 
 void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResources){
 
-    size_t i, j, f;
+    size_t i, j;
 
     // get current and reconfiguration resources
     size_t *idGPUs = jobResources->idGPUs;
@@ -556,8 +551,6 @@ void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResourc
     for(i = 0; i<nGPUs; i++){
 
         // get GPU id
-        size_t srcGPU = idGPUs[i];
-
         if(!selectedGPUs[i]){
 
             // loop over reconfiguration GPUs and find a not selected one
@@ -581,7 +574,7 @@ void configureN2N(jobResources_t *reconfJobResources, jobResources_t *jobResourc
 
     //printf(" [APP]: Splitting information:\n");
     //for(i = 0; i<nGPUs; i++){
-//
+
     //    printf(" -- GPU %zu (%zu): %zu\n", idGPUs[i], i, gpusToSplit[i][0]);
     //}
     //printf("\n");
@@ -599,7 +592,6 @@ void configureEntireTransmission(DTI_t *DTI, jobResources_t *jobResources){
 
     size_t i, nGPUs, *idGPUs;
     size_t N = DTI->N;
-    DTIDesctiption_t *description = DTI->description;
 
     idGPUs = jobResources->idGPUs;
     nGPUs = jobResources->nGPUs;
@@ -694,9 +686,9 @@ void configureSimpleTransmission(DTI_t *DTI, jobResources_t *jobResources){
 // simplified version where only remaining elements are not handled: revise
 void configureComplexTransmission(DTI_t *DTI, jobResources_t *jobResources){
 
-    size_t i, n, tmpOffset, nGPUs, *idGPUs;
+    size_t i, tmpOffset, nGPUs, *idGPUs;
     size_t N = DTI->N;
-    size_t nElementsPerGPU, rElementsPerGPU, nElementsPerPartition, rElementsPerPartition, nPartitionsPerGPU;
+    size_t nPartitionsPerGPU;
     DTIDesctiption_t *description = DTI->description;
     size_t s = description->s;
 
@@ -719,9 +711,6 @@ void configureComplexTransmission(DTI_t *DTI, jobResources_t *jobResources){
     nPartitionsPerGPU = s;
     size_t partitionSize = N / (nPartitionsPerGPU * nGPUs); // the partition size depends on the number of partitions per GPU and the number of GPUs
 
-    // initial number of elements and remaining elements dividing N by the number of GPUs
-    nElementsPerGPU = partitionSize * nPartitionsPerGPU;
-    rElementsPerGPU = 0;
 
     // initialize and allocate partitions information in the DTI
     for(i = 0; i<nGPUs; i++){
@@ -764,9 +753,8 @@ void configureComplexTransmission(DTI_t *DTI, jobResources_t *jobResources){
 
 void configureSimpleExpandTransmission(DTI_t *DTI, jobResources_t *reconfJobResources, jobResources_t *jobResources){
 
-    size_t i, j, n, tmpOffset, next = 0;
+    size_t i, j, n, tmpOffset;
     size_t N = DTI->N;
-    size_t nElements, rElements;
     DTIDesctiption_t *description = DTI->description;
 
     // get gpus to move from each GPU
@@ -877,7 +865,6 @@ void configureSimpleShrinkTransmission(DTI_t *DTI, jobResources_t *reconfJobReso
 
     size_t i, j, n, tmpOffset = 0, next = 0;
     size_t N = DTI->N;
-    size_t nElements, rElements;
     DTIDesctiption_t *description = DTI->description;
 
     // get gpus to move from each GPU
@@ -897,12 +884,10 @@ void configureSimpleShrinkTransmission(DTI_t *DTI, jobResources_t *reconfJobReso
     if(nPartitionsPerGPU == 0){
         nPartitionsPerGPU = 1;
     }
+
     n = N / (nPartitionsPerGPU * nReconfGPUs); // partition size
 
-
-    size_t D = nGPUs / nReconfGPUs;
-
-
+    
     // allocate memory for the new virtual topology
     size_t *newVirtualTopology = (size_t*)calloc(nReconfGPUs, sizeof(size_t));
     for(i = 0; i<nReconfGPUs; i++){
@@ -996,7 +981,6 @@ void configureSimpleN2NTransmission(DTI_t *DTI, jobResources_t *reconfJobResourc
 
     size_t i, j, n, tmpOffset, next = 0;
     size_t N = DTI->N;
-    size_t nElements, rElements;
     DTIDesctiption_t *description = DTI->description;
 
     // get gpus to move from each GPU

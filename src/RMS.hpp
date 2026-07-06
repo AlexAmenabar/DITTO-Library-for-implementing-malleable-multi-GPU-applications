@@ -7,7 +7,6 @@
 #include "jobQueue.hpp"
 #include "eventQueue.hpp"
 
-#define MONITOR_STEPS 1
 #define JOB_MONITOR_STEPS 100
 #define INTERVAL_US 1000000  // 0.1 seconds
 
@@ -18,7 +17,8 @@
 enum eventsEnum {
 
     JOBSTARTED,
-    JOBRECONFIGURED,
+    RECONFSTARTED,
+    RECONFFINISHED,
     JOBFINISHED
 };
 
@@ -211,10 +211,25 @@ struct schInfo_t {
     // Monitoring:
     // information of all resources is monitored by the RMS, and then each job
     // takes only the information it needs
-    unsigned int (*gpuUtilization) [MONITOR_STEPS]; // (nGPUs)? arrays of MONITOR_STEPS
-    double (*gpuPower) [MONITOR_STEPS];
-    unsigned int (*gpuTemperature) [MONITOR_STEPS];
-    unsigned int (*gpuPCIeThroughput) [MONITOR_STEPS];
+    unsigned int (*gpuUtilization) [JOB_MONITOR_STEPS]; // (nGPUs)? arrays of MONITOR_STEPS
+    double (*gpuPower) [JOB_MONITOR_STEPS];
+    unsigned int (*gpuTemperature) [JOB_MONITOR_STEPS];
+    unsigned int (*gpuPCIeThroughput) [JOB_MONITOR_STEPS];
+    size_t nMonitored;
+    size_t monitorIndex;
+
+    // mmonitored data for final statistics
+    double totalPowerConsumption;
+    double *totalPowerConsumptionPerGPU;
+    unsigned int totalUtilization;
+    unsigned int *totalUtilizationPerGPU;
+    unsigned int temperatureSum;
+    unsigned int *temperatureSumPerGPU;
+    unsigned int *totalThroughput; // Think about this
+    unsigned int *totalThroughputPerGPU; // Think about this
+    unsigned int totalAllocationArea;
+    unsigned int *allocationTimePerGPU;
+
 
     // Users in the system
     user_t *users;
@@ -291,7 +306,7 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName);
 void initSystem();
 
 /// Initialize the intra-node GPU topology matrix  
-void initializeTopology(schInfo_t *schInfo);
+void initializeTopology(schInfo_t *schInfo, char *topoFile);
 
 /// Add job to pending queue
 void addPendingJob(jobLauncher_t *jobLauncher);
@@ -303,7 +318,7 @@ void launchJob(job_t *job, size_t pendingIndex, jobResources_t *jobResources);
 void scheduleReconfiguration(job_t *job, size_t jobIndex, jobResources_t *jobResources);
 
 /// Manage the finalization of the job reconfiguration
-void jobFinishedReconfiguration(job_t *job, size_t jobIndex);
+void jobFinishedReconfiguration(job_t *job, size_t jobIndex, jobResources_t *deallocatedResources);
 
 /// Job finished
 void finishJob(job_t *job, size_t runningJobIndex);
@@ -318,7 +333,7 @@ job_t* initJob(jobLauncher_t* jobLauncher);
 void* runJob(void *jobLauncherVoid);
 
 /// Recod an event related to a job (visualization purposes)
-void recordEvent(eventsEnum event, job_t *job);
+void recordEvent(eventsEnum event, job_t *job, jobResources_t *jobResources);
 
 /// Allocate GPUs and update system availability state
 void allocateResources(schInfo_t *schInfo, jobResources_t *jobResources);

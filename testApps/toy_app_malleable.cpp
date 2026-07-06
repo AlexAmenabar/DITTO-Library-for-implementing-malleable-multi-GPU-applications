@@ -51,7 +51,6 @@ void runCPU(float *arr, size_t N, size_t K){
 void simulateIterative(appStruct_t *data){
 
     size_t T = data->T;
-    state_t *state = getState();
 
     for(size_t t = 0; t<T; t++){
 
@@ -97,7 +96,6 @@ void simulatePhases(appStruct_t *data){
 
     size_t T = data->T;
     size_t P = data->P;
-    state_t *state = getState();
 
     for(size_t t = 0; t<T; t++){
 
@@ -160,7 +158,6 @@ void simulatePhases(appStruct_t *data){
                 
                 // get GPUs information
                 size_t nGPUs = getNumberOfGPUs();
-                size_t *idGPUs = getGPUIds();
 
                 // firstprivates should be removed in the future
                 #pragma omp parallel for num_threads (nGPUs)
@@ -185,233 +182,28 @@ void simulatePhases(appStruct_t *data){
     }
 }
 
-void simulateIterativeCommunications(appStruct_t *data){
-    
-    // get number of time steps and state
-    size_t T = data->T;
-    state_t *state = getState();
-
-    for(size_t t = 0; t<T; t++){
-
-        // reconfiguration point, check if there is any pending reconfiguration
-        if(checkIfReconfiguration(getJobControl())){
-
-            reconfigure(GPU2GPU);
-        }
-
-        // copy data from global variables to local variables for enabling visibility to openMP threads (they are thread private)
-        public_APP_Data_t *localData = appData;
-        DTI_t **localArrDTI = arrDTI;
-        size_t localnDTI = nDTI;
-        size_t localmaxDTI = maxDTI;
-            
-
-        // get the information of the GPUs
-        size_t nGPUs = getNumberOfGPUs();
-        size_t *idGPUs = getGPUIds();
-
-
-        // [computation]
-        #pragma omp parallel for num_threads (nGPUs)
-        for(size_t j = 0; j<nGPUs; j++){ // get number of GPUs should receive a parameter such as appData or something
-
-            appData = localData;
-            arrDTI = localArrDTI;
-            nDTI = localnDTI;
-            maxDTI = localmaxDTI;
-
-            // set device
-            cudaSetDevice(idGPUs[j]);
-
-            // run kernel
-            runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
-
-            // sync devices
-            cudaDeviceSynchronize();
-        }
-
-
-        struct timespec startTimer, endTimer;
-
-        // [communication]
-        // check if data should be synchronized
-        if(t % data->nIterationsForCommunications == 0){
-
-            // copy data to the GPU 0
-            int dstDev = 0, srcDev;
-            float **gpuArrs = (float**)calloc(nGPUs - 1, sizeof(float*));
-            cudaError_t err;
-
-            float **dData, *dSrcData, *dDstData;
-            dData = (float**)getDTIByIndex(0)->gpuData;
-            size_t *nPerGPU = getDTIByIndex(0)->nPerGPU;
-
-            for(srcDev = 1; srcDev<nGPUs; srcDev++){ // get number of GPUs should receive a parameter such as appData or something
-    
-                // allocate memory for data in the dst device
-                cudaSetDevice(dstDev); 
-                err = cudaMalloc(&gpuArrs[srcDev-1], (size_t)nPerGPU[srcDev] * (size_t)sizeof(float)); 
-
-
-                // copy data from source
-                cudaSetDevice(srcDev);
-
-                // try to enable peer access from src to dst
-                int canAccess = 0;
-                cudaDeviceCanAccessPeer(&canAccess, dstDev, srcDev);
-
-                // if can access, move data directly, else, use the CPU
-                if (canAccess) {
-                    
-                    // start timer
-                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
-
-                    // enable peer access
-                    cudaDeviceEnablePeerAccess(dstDev, 0);
-
-                    // cpy data directly
-                    cudaMemcpyPeer(gpuArrs[srcDev-1], dstDev, dData[srcDev], srcDev, (size_t)nPerGPU[srcDev] * (size_t)sizeof(float)); // copy P2P
-                    cudaDeviceSynchronize();
-
-                    // end timer
-                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
-
-                } else {
-
-                    printf(" -- P2P communications between GPUs from %d to %d NOT ENABLED!\n", srcDev, dstDev);
-
-                    // cpy data through the CPU
-                    // 1. allocate memory in the CPU
-                    float *tmpCPU = (float*)malloc(nPerGPU[srcDev] * sizeof(float));
-
-
-                    // start timer
-                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
-
-                    // copy to the CPU
-                    err = cudaMemcpy(tmpCPU, dData[srcDev], nPerGPU[srcDev], cudaMemcpyDeviceToHost); 
-
-                    // copy to the GPU
-                    err = cudaMemcpy(gpuArrs[srcDev-1], tmpCPU, nPerGPU[srcDev], cudaMemcpyHostToDevice); 
-
-                    // end timer
-                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
-
-                    // dellocate temporal CPU memory
-                    free(tmpCPU);
-
-                    printf(" -- Communication through CPU finished\n");
-                    fflush(stdout);
-                }
-
-                data->communicationTimeSrcDst += (endTimer.tv_sec - startTimer.tv_sec) + (endTimer.tv_nsec - startTimer.tv_nsec) / 1e9;
-
-
-                // sync devices
-                cudaDeviceSynchronize();
-            }
-            
-            // do some computation?
-
-
-            // store time
-
-            // now the 0 is the src
-            srcDev = 0;
-
-            // move data again to the src GPUs
-            for(dstDev = 1; dstDev<nGPUs; dstDev++){ // get number of GPUs should receive a parameter such as appData or something
-
-                // set src device and check peer access to dst 
-                cudaSetDevice(srcDev);
-
-                // try to enable peer access
-                int canAccess = 0;
-                cudaDeviceCanAccessPeer(&canAccess, dstDev, srcDev);
-
-                // if can access, move data directly, else, use the CPU
-                if (canAccess) {
-
-                    //printf(" -- P2P communications between GPUs from %d to %d ENABLED!\n", srcDev, dstDev);
-                    
-                    // set current device
-                    cudaSetDevice(srcDev); // 
-
-                    // start timer
-                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
-
-                    cudaDeviceEnablePeerAccess(dstDev, 0); // enable peer access to destination device
-
-                    // cpy data directly
-                    cudaMemcpyPeer(dData[dstDev], dstDev, gpuArrs[dstDev-1], srcDev, nPerGPU[dstDev] * sizeof(float)); // copy P2P
-                    cudaDeviceSynchronize();
-
-                    // end timer
-                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
-
-                    //printf(" -- P2P communication finished\n");
-                    //fflush(stdout);
-
-                } else {
-
-                    printf(" -- P2P communications between GPUs from %d to %d NOT ENABLED!\n", srcDev, dstDev);
-
-                    // cpy data through the CPU
-                    // 1. allocate memory in the CPU
-                    float* tmpCPU = (float*)malloc(nPerGPU[dstDev] * sizeof(float));
-
-                    // start timer
-                    clock_gettime(CLOCK_MONOTONIC, &(startTimer));
-
-                    // copy to the CPU
-                    err = cudaMemcpy(tmpCPU, gpuArrs[dstDev-1], nPerGPU[dstDev], cudaMemcpyDeviceToHost); 
-
-                    // copy to the GPU
-                    err = cudaMemcpy(dData[dstDev], tmpCPU, nPerGPU[dstDev], cudaMemcpyHostToDevice); 
-
-                    // end timer
-                    clock_gettime(CLOCK_MONOTONIC, &(endTimer));
-
-                    // dellocate temporal CPU memory
-                    free(tmpCPU);
-
-                    printf(" -- Communication through CPU finished\n");
-                    fflush(stdout);
-                }
-
-                data->communicationTimeDstSrc += (endTimer.tv_sec - startTimer.tv_sec) + (endTimer.tv_nsec - startTimer.tv_nsec) / 1e9;
-
-
-                // sync devices
-                cudaDeviceSynchronize();
-
-                // deallocate gpuArrs
-                cudaFree(gpuArrs[dstDev-1]);
-            }
-            
-            // deallocate 
-            free(gpuArrs);
-        }
-    }
-
-    data->communicationTimeSrcDst = (double)((double)data->communicationTimeSrcDst / (double)T);
-    data->communicationTimeDstSrc = (double)((double)data->communicationTimeDstSrc / (double)T);
-}
-
 
 
 void simulateIterativeNCCL(appStruct_t *data){
     
     // get number of time steps and state
+    size_t i;
     size_t T = data->T;
-    state_t *state = getState();
 
+    double etComputation = 0.0, etCommunication = 0.0;
+    struct timespec startComputation, endComputation;
+    struct timespec startCommunication, endCommunication;
+
+    // simulate iterations
     for(size_t t = 0; t<T; t++){
 
         // reconfiguration point, check if there is any pending reconfiguration
         if(checkIfReconfiguration(getJobControl())){
 
-            reconfigure(GPU2GPU);
+            // reconfigure and manage NCCL communicators
+            freeNCCLComm(getState()->jobResources);
+            reconfigure(CPU);
+            initNCCLComm(getState()->jobResources);
         }
 
         // copy data from global variables to local variables for enabling visibility to openMP threads (they are thread private)
@@ -419,7 +211,7 @@ void simulateIterativeNCCL(appStruct_t *data){
         DTI_t **localArrDTI = arrDTI;
         size_t localnDTI = nDTI;
         size_t localmaxDTI = maxDTI;
-            
+  
 
         // get the information of the GPUs
         size_t nGPUs = getNumberOfGPUs();
@@ -427,8 +219,9 @@ void simulateIterativeNCCL(appStruct_t *data){
 
 
         // [computation]
+        clock_gettime(CLOCK_MONOTONIC, &startComputation);
         #pragma omp parallel for num_threads (nGPUs)
-        for(size_t j = 0; j<nGPUs; j++){ // get number of GPUs should receive a parameter such as appData or something
+        for(i = 0; i<nGPUs; i++){ // get number of GPUs should receive a parameter such as appData or something
 
             appData = localData;
             arrDTI = localArrDTI;
@@ -436,21 +229,21 @@ void simulateIterativeNCCL(appStruct_t *data){
             maxDTI = localmaxDTI;
 
             // set device
-            cudaSetDevice(idGPUs[j]);
+            cudaSetDevice(idGPUs[i]);
 
             // run kernel
-            runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
+            runKernel((float*)(getDTIByIndex(0)->gpuData[i]), getDTIByIndex(0)->nPerGPU[i], data->K);     
 
             // sync devices
             cudaDeviceSynchronize();
         }
-
-
-        struct timespec startTimer, endTimer;
+        clock_gettime(CLOCK_MONOTONIC, &endComputation);
+        etComputation += (endComputation.tv_sec - startComputation.tv_sec) + (endComputation.tv_nsec - startComputation.tv_nsec) / 1e9;
 
         // [communication]
+        clock_gettime(CLOCK_MONOTONIC, &startCommunication);
         // check if data should be synchronized
-        if(t % data->nIterationsForCommunications == 0){
+        if((t+1) % data->nIterationsForCommunications == 0){
 
             // copy data to the GPU 0
             cudaError_t err;
@@ -469,6 +262,7 @@ void simulateIterativeNCCL(appStruct_t *data){
                 cudaSetDevice(idGPUs[i]);
                 ncclAllReduce(dData[i], dData[i], nPerGPU[i], ncclFloat, ncclSum, comms[i], streams[i]);
             }
+             
             ncclGroupEnd(); // Aquí es donde NCCL ejecuta la comunicación en paralelo
 
             // division (we are computing the mean)
@@ -484,21 +278,105 @@ void simulateIterativeNCCL(appStruct_t *data){
 
             // sync streams
             for (size_t i = 0; i < nGPUs; i++) {
+
                 cudaSetDevice(idGPUs[i]);
-                cudaStreamSynchronize(streams[i]);
+                err = cudaStreamSynchronize(streams[i]);
+
+                if(err != cudaSuccess)
+                    printf("Job: Allreduce failed:  %s\n", cudaGetErrorString(err));
             }
         }
+        clock_gettime(CLOCK_MONOTONIC, &endCommunication);
+        etCommunication += (endCommunication.tv_sec - startCommunication.tv_sec) + (endCommunication.tv_nsec - startCommunication.tv_nsec) / 1e9;
     }
 
-    data->communicationTimeSrcDst = (double)((double)data->communicationTimeSrcDst / (double)T);
-    data->communicationTimeDstSrc = (double)((double)data->communicationTimeDstSrc / (double)T);
+    double comp = etComputation / (double)T;
+    double comm = etCommunication / (double)T;
+
+    printf("%lf %lf\n", comp, comm);
 }
 
 
 void simulateIterativeUnifiedMemory(appStruct_t *data){
+    
+    // get number of time steps and state
+    size_t i;
+    size_t T = data->T;
+
+    double etComputation = 0.0;
+    struct timespec startComputation, endComputation;
+
+    clock_gettime(CLOCK_MONOTONIC, &startComputation);
+
+    // simulate iterations
+    for(size_t t = 0; t<T; t++){
+
+        /*if(t % 10 == 0){
+            printf(" T = %zu / %zu\n", t, T);
+            fflush(stdout);
+        }*/
+
+        // reconfiguration point, check if there is any pending reconfiguration
+        /*if(checkIfReconfiguration(getJobControl())){
+
+            reconfigure(GPU2GPU);
+        }*/
+
+        // copy data from global variables to local variables for enabling visibility to openMP threads (they are thread private)
+        public_APP_Data_t *localData = appData;
+        DTI_t **localArrDTI = arrDTI;
+        size_t localnDTI = nDTI;
+        size_t localmaxDTI = maxDTI;
+  
+
+        // get the information of the GPUs
+        size_t nGPUs = getNumberOfGPUs();
+        size_t *idGPUs = getGPUIds();
 
 
+        // [computation]
+        #pragma omp parallel for num_threads (nGPUs)
+        for(i = 0; i<nGPUs; i++){ // get number of GPUs should receive a parameter such as appData or something
 
+            appData = localData;
+            arrDTI = localArrDTI;
+            nDTI = localnDTI;
+            maxDTI = localmaxDTI;
+
+            // set device
+            cudaSetDevice(idGPUs[i]);
+
+            // run kernel
+            runGraphKernel((float*)(data->gValues), data->N, data->nPerNode, data->offPerNode, data->tmpAcc, data->indices, data->K);     
+
+            // sync devices
+            cudaDeviceSynchronize();
+        }
+
+        // [computation]
+        #pragma omp parallel for num_threads (nGPUs)
+        for(i = 0; i<nGPUs; i++){ // get number of GPUs should receive a parameter such as appData or something
+
+            appData = localData;
+            arrDTI = localArrDTI;
+            nDTI = localnDTI;
+            maxDTI = localmaxDTI;
+
+            // set device
+            cudaSetDevice(idGPUs[i]);
+
+            // run kernel
+            runUpdateNodesKernel((float*)(data->gValues), data->N, data->nPerNode, data->tmpAcc);     
+
+            // sync devices
+            cudaDeviceSynchronize();
+        }
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &endComputation);
+    etComputation += (endComputation.tv_sec - startComputation.tv_sec) + (endComputation.tv_nsec - startComputation.tv_nsec) / 1e9;
+
+    printf("%lf\n", etComputation);
 }
 
 /* Application MAIN functions */
@@ -524,8 +402,8 @@ void launch_iterative_app(int argc, void* argv[]){
     size_t steps = *(size_t*)argv[6];
     size_t cores = *(size_t*)argv[7];
 
-    int enumValue = *(int*)argv[8];
-    reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
+    //int enumValue = *(int*)argv[8];
+    //reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
 
     appData->malleable = *(size_t*)argv[argc]; 
 
@@ -625,8 +503,8 @@ void launch_phases_app(int argc, void* argv[]){
     size_t steps = *(size_t*)argv[8];
     size_t cores = *(size_t*)argv[9];
 
-    int enumValue = *(int*)argv[10];
-    reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
+    //int enumValue = *(int*)argv[10];
+    //reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
 
     appData->phases = (size_t*)calloc(appData->P, sizeof(size_t));
     for(i = 0; i<appData->P; i++)
@@ -704,124 +582,6 @@ void launch_phases_app(int argc, void* argv[]){
     pthread_exit(NULL);
 }
 
-
-void launch_communications_app(int argc, void* argv[]){
-
-    size_t i;
-
-    // initialize DITTO environment
-    // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
-    initDITTO(argv[argc+1]);
-
-    appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
-    appData->N = *(size_t*)argv[0];
-    appData->T = *(size_t*)argv[1];
-    appData->K = *(size_t*)argv[2];
-    appData->nIterationsForCommunications = *(size_t*)argv[3];
-    appData->s = *(size_t*)argv[4];
-
-    // communication info
-    size_t pinned = *(size_t*)argv[5];
-    size_t async = *(size_t*)argv[6];
-    size_t steps = *(size_t*)argv[7];
-    size_t cores = *(size_t*)argv[8];
-    
-    int enumValue = *(int*)argv[9];
-    reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
-
-    appData->malleable = *(size_t*)argv[argc];
-
-    // allocate memory for App Data
-    if(pinned) // pinned memory
-        cudaMallocHost(&appData->arr, appData->N * sizeof(float));
-    else
-        appData->arr = (float*)calloc(appData->N, sizeof(float));
-    
-    // initialize data
-    for(i = 0; i<appData->N; i++)
-        appData->arr[i] = (float)i;//(float)rand()/(float)(RAND_MAX);
-
-
-    // set communication type
-    communicationType_t commType;
-    if(pinned)
-        commType.cudaMemoryType = pinnedComm;
-    else 
-        commType.cudaMemoryType = nonPinnedComm;
-
-    if(async)
-        commType.transmissionType = asyncComm;
-    else
-        commType.transmissionType = syncComm;
-    
-    if(steps == 0)
-        commType.transferSteps = oneStepComm;
-    else if(steps == 1)
-        commType.transferSteps = twoStepsComm;
-    else
-        commType.transferSteps = stridedComm;
-
-    if(cores)
-        commType.transferCores = multiCoreComm;
-    else
-        commType.transferCores = singleCoreComm;
-
-
-    // Initialize DTIs for automatically managing CPU-GPU communications
-    DTI_t *appDataDTI;
-    if(appData->s > 0)
-        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeComplexDTIDescription(complex, ordered, commType, appData->s));
-    else
-        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
-
-
-    // configure all DTIs for automatic data transference // TODO: configure in initialization
-    configureDTIs(getState()->jobResources, NULL, CPU2GPU); // number of GPUs, old number of GPUs
-
-    // send data to the GPU
-    transferDataCPU2GPU();
-
-
-    // When we want to test network congestion, we want to make the job wait until
-    // the rest of jobs start
-    char startRunning = getJobControl()->startRunning; 
-    while(!startRunning){
-        
-        sleep(1);
-        pthread_mutex_lock(&(getJobControl()->lockStartRunning));
-        startRunning = getJobControl()->startRunning; 
-        pthread_mutex_unlock(&(getJobControl()->lockStartRunning));
-    }
-
-    printf(" -- Running\n");
-    fflush(stdout);
-
-
-    // wait for signal before starting
-    simulateIterativeCommunications(appData);
-
-    // transfer data fron the GPUs to the CPU
-    transferDataGPU2CPU();
-
-    //printf(" [RES]: %zu bytes; from %zu to %zu; %lf %lf\n", 
-    //        appData->N * sizeof(float), getGPUIds()[0], getGPUIds()[1], appData->communicationTimeSrcDst, appData->communicationTimeDstSrc);
-
-
-    if(pinned)
-        cudaFreeHost(appDataDTI->cpuData);
-    else
-        free(appDataDTI->cpuData);
-
-    // destroy streams
-    freeDITTO();
-
-    // signal that job finished
-    jobFinished(getJobControl());
-
-    pthread_exit(NULL);
-}
-
-
 // pending for being tested
 void launch_NCCL_communications_app(int argc, void* argv[]){
 
@@ -844,10 +604,12 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
     size_t steps = *(size_t*)argv[7];
     size_t cores = *(size_t*)argv[8];
     
-    int enumValue = *(int*)argv[9];
-    reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
+    //int enumValue = *(int*)argv[9];
+    //reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
 
     appData->malleable = *(size_t*)argv[argc];
+
+    
 
     // allocate memory for App Data
     if(pinned) // pinned memory
@@ -939,7 +701,7 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
 
 
 // pending for being tested
-void launch_Unified_memory_app(int argc, void* argv[]){
+void launch_unified_memory_app(int argc, void* argv[]){
 
 
     size_t i;
@@ -948,21 +710,23 @@ void launch_Unified_memory_app(int argc, void* argv[]){
     // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
     initDITTO(argv[argc+1]);
 
+
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
     appData->N = *(size_t*)argv[0];
     appData->T = *(size_t*)argv[1];
     appData->K = *(size_t*)argv[2];
-    appData->nIterationsForCommunications = *(size_t*)argv[3];
-    appData->s = *(size_t*)argv[4];
 
     // communication info
-    size_t pinned = *(size_t*)argv[5];
-    size_t async = *(size_t*)argv[6];
-    size_t steps = *(size_t*)argv[7];
-    size_t cores = *(size_t*)argv[8];
+    //size_t pinned = *(size_t*)argv[3];
+    //size_t async = *(size_t*)argv[4];
+    //size_t steps = *(size_t*)argv[5];
+    //size_t cores = *(size_t*)argv[6];
     
-    int enumValue = *(int*)argv[9];
-    reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
+    //int enumValue = *(int*)argv[7];
+    //reconfDirEnum reconfDir = (reconfDirEnum)enumValue; 
+
+    int pGroup = *(int*)argv[8];
+    int pNGroup = *(int*)argv[9];
 
     appData->malleable = *(size_t*)argv[argc];
 
@@ -975,31 +739,90 @@ void launch_Unified_memory_app(int argc, void* argv[]){
     // allocate unifed memory
     cudaMallocManaged((void**)&(appData->gValues), N * sizeof(float));
 
+
     // temporal memory
-    size_t **indices = (size_t**)calloc(nGPUs, sizeof(size_t*));
+    size_t **indices = (size_t**)calloc(N, sizeof(size_t*));
     size_t *n = (size_t*)calloc(N, sizeof(size_t));
+    size_t tN = 0;
 
-    //for(i = 0; i<getState()->jobResources->nGPUs; i++){
+    // allocate memory for indices
+    for(i = 0; i < N; i++){
 
-    //    indices[i] = 
-    //    for(size_t j = 0; j<appData->N / )
-    //}
-
-
-    // create indices
-    //for(size_t g = 0; g<getState()->jobResources->nGPUs; g++){
+        indices[i] = (size_t*)calloc(N, sizeof(size_t));
+    }
 
 
-    //}
+    for(i = 0; i<getState()->jobResources->nGPUs; i++){
+
+        for(size_t j = i * N / nGPUs; j < (i+1) * (N / nGPUs); j++){
+
+            for(size_t l = 0; l<N; l++){
+
+                int connected = 0;
+                int val = rand() % 100;
+
+                if(j >= i * (N / nGPUs) && i < (i+1) * (N / nGPUs)){
+
+                    if(val < pGroup){
+                        connected = 1;
+                    }
+                }
+                else{
+
+                    if(val < pNGroup){
+                        connected = 1;
+                    }
+                }
+
+                if(connected){
+
+                    indices[j][l] = 1;
+                    n[j] ++;
+                    tN ++;
+                }
+            }
+        }
+    }
+
+    //printf(" Done!\n");
+    //fflush(stdout);
+
+    cudaMallocManaged((void**)&(appData->indices), tN * sizeof(size_t));
+    cudaMallocManaged((void**)&(appData->nPerNode), N * sizeof(size_t));
+    cudaMallocManaged((void**)&(appData->offPerNode), N * sizeof(size_t));
+    cudaMallocManaged((void**)&(appData->tmpAcc), N * sizeof(size_t));
+
+    // copy indexes to unified memory
+    size_t next = 0;
+    for(size_t i = 0; i<N; i++){
+
+        appData->nPerNode[i] = n[i];
+        appData->offPerNode[i] = next;
+
+        for(size_t j = 0; j<N; j++){
+
+            if(indices[i][j]){
+                
+                appData->indices[next] = j;
+                next++;
+            }
+        }
+    }
 
 
-    //
-    //cudaMallocManaged((void**)&(appData->indices), appData->N)
+    free(n);
+    
+    for(i = 0; i<getState()->jobResources->nGPUs; i++){
+        
+        free(indices[i]);
+    }
+    free(indices);
+
 
     // each GPU will write from [i * N] to [(i + 1) * N], being i the GPU index
 
     // set communication type
-    communicationType_t commType;
+    /*communicationType_t commType;
     if(pinned)
         commType.cudaMemoryType = pinnedComm;
     else 
@@ -1020,7 +843,7 @@ void launch_Unified_memory_app(int argc, void* argv[]){
     if(cores)
         commType.transferCores = multiCoreComm;
     else
-        commType.transferCores = singleCoreComm;
+        commType.transferCores = singleCoreComm;*/
 
 
     // wait for signal before starting
@@ -1032,6 +855,12 @@ void launch_Unified_memory_app(int argc, void* argv[]){
     //printf(" [RES]: %zu bytes; from %zu to %zu; %lf %lf\n", 
     //        appData->N * sizeof(float), getGPUIds()[0], getGPUIds()[1], appData->communicationTimeSrcDst, appData->communicationTimeDstSrc);
 
+
+	cudaFree(appData->indices);
+	cudaFree(appData->nPerNode);
+	cudaFree(appData->offPerNode);
+	cudaFree(appData->gValues);
+    cudaFree(appData->tmpAcc);
 
     // destroy streams
     freeDITTO();
@@ -1195,7 +1024,7 @@ void launch_malloc_test_app(int argc, void* argv[]){
 
 
     struct timespec startMalloc, endMalloc, startFree, endFree, startFirstMalloc, endFirstMalloc, startFirstFree, endFirstFree;
-    double etimeMalloc = 0.0, etime = 0.0, etimeFree = 0.0, etimeFirstMalloc = 0.0, etimeFirstFree = 0.0;
+    double etimeMalloc = 0.0, etimeFree = 0.0, etimeFirstMalloc = 0.0, etimeFirstFree = 0.0;
 
     clock_gettime(CLOCK_MONOTONIC, &startFirstMalloc);
     // allocate memory for App Data

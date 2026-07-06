@@ -52,8 +52,8 @@ void initDITTO(void *jobControl){
     appData->cudaStreams = (cudaStream_t*)malloc(8 * sizeof(cudaStream_t)); // 8 because we consider that it is the maximum number of GPUs we will use for now, in intra-node configurations
     initializeStreams(appData->jobControl->jobResources);
 
-    //appData->ncclComms = (ncclComm_t*)malloc(8 * sizeof(ncclComm_t));
-    //initializeNCCLComm(appData->jobControl->jobResources);
+    appData->ncclComms = (ncclComm_t*)malloc(8 * sizeof(ncclComm_t));
+    initializeNCCLComm(appData->jobControl->jobResources);
 
     // initialize DTI data
     nDTI = 0;
@@ -68,6 +68,9 @@ void freeDITTO(){
 
     // destroy streams
     destroyStreams(getState()->jobResources);
+
+    // finish 
+    destroyNCCLComm(getState()->jobResources);
 }
 
 jobControl_t* getJobControl(){
@@ -205,14 +208,25 @@ ncclComm_t* getNCCLComms(){
     return appData->ncclComms;
 }
 
+
+void initNCCLComm(jobResources_t *jobResources){
+
+    initializeNCCLComm(jobResources);
+}
+
+void freeNCCLComm(jobResources_t *jobResources){
+
+    destroyNCCLComm(jobResources);
+}
+
 void reconfigure(reconfDirEnum reconfDir){
 
     // TODO: revise DDM and DTM functions
     // TODO: deallocations
     // TODO: GPU-CPU-GPU correction
 
-    double tRecfg = 0.0, tConf = 0.0, tComm = 0.0, tGPU2CPU = 0.0, tCPU2GPU = 0.0;
-    struct timespec startRecfg, endRecfg, startConf, endConf, startComm, endComm, startGPU2CPU, startCPU2GPU, endGPU2CPU, endCPU2GPU;
+    double tConf = 0.0, tComm = 0.0, tGPU2CPU = 0.0, tCPU2GPU = 0.0;
+    struct timespec startConf, endConf, startComm, endComm, startGPU2CPU, startCPU2GPU, endGPU2CPU, endCPU2GPU;
 
     jobResources_t *reconfJobResources, *jobResources;
 
@@ -289,10 +303,6 @@ void reconfigure(reconfDirEnum reconfDir){
     // destroy old streams and initialize new ones
     destroyStreams(jobResources);
     initializeStreams(reconfJobResources);
-
-    // destroy and create NCCL communicator
-    //destroyNCCLComm(jobResources);
-    //initializeNCCLComm(jobResources);
 
     // update state
     updateState(state, jobControl);
@@ -499,7 +509,9 @@ DTI_t* getDTI(const char *dtiName){
 // get DTI by index
 DTI_t* getDTIByIndex(int i){
 
-    if(i<maxDTI)
+    size_t ui = (size_t)i;
+
+    if(ui < maxDTI)
         return arrDTI[i];
     return NULL;
 }
@@ -543,7 +555,6 @@ DTIDesctiption_t* initializeComplexDTIDescription(transmissionPatternsEnum tpttE
 void printDTI(DTI_t *DTI){
 
     size_t i, j;
-    state_t *state = getState();
     size_t nGPUs = getNumberOfGPUs();
 
     for(i = 0; i<nGPUs; i++){

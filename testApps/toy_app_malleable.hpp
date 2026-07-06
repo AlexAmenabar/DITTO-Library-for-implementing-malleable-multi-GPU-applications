@@ -16,7 +16,10 @@ typedef struct appStruct_t {
 
 
     float *gValues; // graph values
-    size_t **indices;
+    float *tmpAcc;
+    size_t *indices;
+    size_t *offPerNode;
+    size_t *nPerNode;
 
     // iterative application with phases
     size_t P;
@@ -38,6 +41,10 @@ typedef struct appStruct_t {
 
 void runCPU(float *arr, size_t N, size_t K);
 void runKernel(float* arr, size_t N, size_t K);
+void runGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K);
+void runUpdateNodesKernel(float* arr, size_t N, size_t *n, float *tmpAcc);
+
+
 void launch_iterative_app(int argc, void* argv[]);
 void launch_phases_app(int argc, void* argv[]);
 void launch_communications_app(int argc, void* argv[]);
@@ -48,5 +55,6 @@ void launch_malloc_test_app(int argc, void* argv[]);
 
 void launch_reconfs_test_app_new(int argc, void* argv[]);
 void launch_NCCL_communications_app(int argc, void* argv[]);
+void launch_unified_memory_app(int argc, void* argv[]);
 
 // test communication application

@@ -30,7 +30,7 @@ __global__ void simulateKernel(float* arr, size_t N, size_t K){
 }
 
 
-__global__ void simulateUnifiedRegularKernel(float* arr, size_t N, size_t K){
+__global__ void simulateGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K){
 
     size_t threadId = 
         ((size_t)blockIdx.x  + (size_t)gridDim.x  * (size_t)blockIdx.y + (size_t)gridDim.x * (size_t)gridDim.y * (size_t)blockIdx.z) *
@@ -40,22 +40,25 @@ __global__ void simulateUnifiedRegularKernel(float* arr, size_t N, size_t K){
     if(threadId < N){
     
         float val = arr[threadId];
-        float v0 = val, v1 = val, v2 = val, v3 = val;
+        float v;
 
         for (size_t k = 0; k < K; k++) {
-            v0 = v0 * 1.000001f + 0.000001f;
-            v1 = v1 * 1.000001f + 0.000001f;
-            v2 = v2 * 1.000001f + 0.000001f;
-            v3 = v3 * 1.000001f + 0.000001f;
+
+            for(size_t i = 0; i<n[threadId]; i++){
+        
+                size_t pos = off[i];
+                size_t nodeIndex = indices[pos];
+                v = arr[nodeIndex];
+                val += v;
+            }
+
+            val = val * 0.125f;
         }
 
-        val = (v0 + v1 + v2 + v3) * 0.125f;
-
-        arr[threadId] = val;
+        tmpAcc[threadId] = val;
     }
 }
-
-__global__ void simulateUnifiedRandomKernel(float* arr, size_t N, size_t K){
+__global__ void updateNode(float* arr, size_t N, size_t *n, float *tmpAcc){
 
     size_t threadId = 
         ((size_t)blockIdx.x  + (size_t)gridDim.x  * (size_t)blockIdx.y + (size_t)gridDim.x * (size_t)gridDim.y * (size_t)blockIdx.z) *
@@ -64,22 +67,10 @@ __global__ void simulateUnifiedRandomKernel(float* arr, size_t N, size_t K){
 
     if(threadId < N){
     
-        float val = arr[threadId];
-        float v0 = val, v1 = val, v2 = val, v3 = val;
-
-        for (size_t k = 0; k < K; k++) {
-
-            v0 = v0 * 1.000001f + 0.000001f;
-            v1 = v1 * 1.000001f + 0.000001f;
-            v2 = v2 * 1.000001f + 0.000001f;
-            v3 = v3 * 1.000001f + 0.000001f;
-        }
-
-        val = (v0 + v1 + v2 + v3) * 0.125f;
-
-        arr[threadId] = val;
+        arr[threadId] = (arr[threadId] + tmpAcc[threadId]) / n[threadId];
     }
 }
+
 
 
 void runKernel(float* arr, size_t N, size_t K){
@@ -88,5 +79,24 @@ void runKernel(float* arr, size_t N, size_t K){
     size_t blocks = (N + threads - 1) / threads;
 
     simulateKernel<<<blocks, threads>>>(arr, N, K);
+    cudaDeviceSynchronize();
+}
+
+void runGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K){
+
+    size_t threads = 512;
+    size_t blocks = (N + threads - 1) / threads;
+
+    simulateGraphKernel<<<blocks, threads>>>(arr, N, n, off, tmpAcc, indices, K);
+    cudaDeviceSynchronize();
+}
+
+
+void runUpdateNodesKernel(float* arr, size_t N, size_t *n, float *tmpAcc){
+
+    size_t threads = 512;
+    size_t blocks = (N + threads - 1) / threads;
+
+    updateNode<<<blocks, threads>>>(arr, N, n, tmpAcc);
     cudaDeviceSynchronize();
 }

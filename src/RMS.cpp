@@ -51,7 +51,6 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
 
     // declare variables
     FILE *jobF; // file to load jobs timeline from
-    void** argv; // arguments variable to initialize job launchers
     jobsTimeline_t *jobsTimeline; // jobs timeline structure to store jobs data
     size_t jobType, jobPriority;
 
@@ -166,10 +165,6 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
 
             jobLauncher->launchFunc = &launch_phases_app;
         }
-        else if(jobLauncher->appType == 2){
-            
-            jobLauncher->launchFunc = &launch_communications_app;
-        }
         fflush(stdout);
     }
 
@@ -185,10 +180,17 @@ void initSystem(){
     exit(1); 
 }
 
-void initializeTopology(schInfo_t *schInfo){
+void initializeTopology(schInfo_t *schInfo, char *topoFile){
 
     // get the number of GPUs
     size_t N = schInfo->nGPUs;
+
+    // topology file
+    FILE *fTopo; // file to load jobs timeline from
+
+    // open file and allocate memory for timeline data
+    fTopo = fopen(topoFile, "r");
+
 
     // matrix of N * N
     int *gpuTopology = (int*)calloc(N * N, sizeof(int));
@@ -212,7 +214,11 @@ void initializeTopology(schInfo_t *schInfo){
 
         for(size_t j = 0; j<N; j++){
 
-            if(i!=j){
+            fscanf(fTopo, "%d", &(gpuTopology[i * N + j]));
+            gpuTopologyRank[i * N + j] = 0;
+
+
+            /*if(i!=j){
 
                 nvmlDevice_t dev0, dev1;
                 nvmlDeviceGetHandleByIndex(i, &dev0);
@@ -254,7 +260,7 @@ void initializeTopology(schInfo_t *schInfo){
                 gpuTopology[i * N + j] = 0;
                 gpuTopologyRank[i * N + j] = 0;
 
-            }
+            }*/
         }
     }
 
@@ -323,7 +329,7 @@ void launchJob(job_t *job, size_t pendingIndex, jobResources_t *jobResources){
     clock_gettime(CLOCK_MONOTONIC, &(job->jobStartRunning)); // start running
 
     // record event (visualization purposes)
-    recordEvent(JOBSTARTED, job);
+    recordEvent(JOBSTARTED, job, jobResources);
 
     // add job to running queue
     addJobToQueue(&(schInfo->runningJobs), job);
@@ -347,12 +353,35 @@ void scheduleReconfiguration(job_t *job, size_t jobIndex, jobResources_t *jobRes
 
     // set job resources for reconfiguration
     jobControl->reconfJobResources = jobResources;
+    jobResources_t *prevJobResources = jobControl->jobResources;
+
+    // find GPUs that appear in both current and reconfiguration job resources
+    jobResources_t *newJobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    newJobResources->nGPUs = 0;
+    newJobResources->idGPUs = (size_t*)calloc(jobResources->nGPUs, sizeof(size_t));
+    for(size_t i = 0; i < jobResources->nGPUs; i++){
+
+        for(size_t j = 0; j < prevJobResources->nGPUs; j++){
+
+            if(jobResources->idGPUs[i] == prevJobResources->idGPUs[j]){
+
+                newJobResources->idGPUs[newJobResources->nGPUs] = jobResources->idGPUs[i];
+                newJobResources->nGPUs ++;
+            }
+        }
+    }
+
+    // record event
+    recordEvent(RECONFSTARTED, job, newJobResources);
+
+    // deallocate temporal structure
+    deallocateJobResourcesStruct(&(newJobResources));
 
     // notify reconfiguration to the job
     notifyReconfiguration(jobControl);
 }
 
-void jobFinishedReconfiguration(job_t *job, size_t jobIndex){
+void jobFinishedReconfiguration(job_t *job, size_t jobIndex, jobResources_t *deallocatedResources){
 
     // get job control
     jobControl_t *jobControl = job->jobControl;    
@@ -367,13 +396,12 @@ void jobFinishedReconfiguration(job_t *job, size_t jobIndex){
     job->jobMonitor = initJobMonitor(job->jobMonitor, jobControl->reconfJobResources);
 
     // record event
-    recordEvent(JOBRECONFIGURED, job);
+    recordEvent(RECONFFINISHED, job, deallocatedResources);
 
     // update job resources
     // 1. deallocate old resources, reconfiguration is done, they are not relevant anymore
-    free(jobControl->jobResources->idGPUs);
-    free(jobControl->jobResources);
-
+    deallocateJobResourcesStruct(&(jobControl->jobResources));
+    
     // reconf job resources are now current job resources
     jobControl->jobResources = jobControl->reconfJobResources;
     jobControl->reconfJobResources = NULL;
@@ -392,12 +420,13 @@ void finishJob(job_t *job, size_t runningJobIndex){
     clock_gettime(CLOCK_MONOTONIC, &(job->jobEndRunning));
 
     // record event
-    recordEvent(JOBFINISHED, job);
+    recordEvent(JOBFINISHED, job, job->jobControl->jobResources);
+
+    // deallocate resource structure
+    //deallocateJobResourcesStruct(&(job->jobControl->jobResources));
 
     // update job state
     job->jobState = FINISHED;
-
-    // TODO: deallocate job information that is not necessary anymore?
 }
 
 jobMonitoring_t* initJobMonitor(jobMonitoring_t *jobMonitor, jobResources_t *jobResources){
@@ -483,30 +512,30 @@ void* runJob(void *vJobLauncher){
     return NULL;
 }
 
-void recordEvent(eventsEnum event, job_t *job){
+void recordEvent(eventsEnum event, job_t *job, jobResources_t *jobResources){
 
     size_t gpu;
     size_t jobId = job->jobId;
 
-    jobControl_t *jobControl = job->jobControl;
-
     switch(event){
         case JOBSTARTED:
-            for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
-                fprintf(fEventRecord, "%zu,%zu,%d,start\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+            for(gpu = 0; gpu < jobResources->nGPUs; gpu++){
+                fprintf(fEventRecord, "%zu,%zu,%d,start\n", jobResources->idGPUs[gpu], jobId, timer);
             }
         break;
-        case JOBRECONFIGURED:
-            for(gpu = 0; gpu<jobControl->reconfJobResources->nGPUs; gpu++){
-                fprintf(fEventRecord, "%zu,%zu,%d,start\n", jobControl->reconfJobResources->idGPUs[gpu], jobId, timer);
+        case RECONFSTARTED:
+            for(gpu = 0; gpu < jobResources->nGPUs; gpu++){
+                fprintf(fEventRecord, "%zu,%zu,%d,start\n", jobResources->idGPUs[gpu], jobId, timer);
             }
-            for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
-                fprintf(fEventRecord, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+        break;
+        case RECONFFINISHED:
+            for(gpu = 0; gpu < jobResources->nGPUs; gpu++){
+                fprintf(fEventRecord, "%zu,%zu,%d,end\n", jobResources->idGPUs[gpu], jobId, timer);
             }
         break;
         case JOBFINISHED:
-            for(gpu = 0; gpu<jobControl->jobResources->nGPUs; gpu++){
-                fprintf(fEventRecord, "%zu,%zu,%d,end\n", jobControl->jobResources->idGPUs[gpu], jobId, timer);
+            for(gpu = 0; gpu < jobResources->nGPUs; gpu++){
+                fprintf(fEventRecord, "%zu,%zu,%d,end\n", jobResources->idGPUs[gpu], jobId, timer);
             }
         break;
     }
@@ -517,7 +546,7 @@ void allocateResources(schInfo_t *schInfo, jobResources_t *jobResources){
 
     size_t i;
 
-    // current implementation allocates resources in order
+    // allocate selected resources for job
     for(i = 0; i<jobResources->nGPUs; i++){
 
         size_t gpu = jobResources->idGPUs[i];
@@ -689,12 +718,6 @@ void* resourceMonitoring(void *finished){
  
     int *finish = (int*)finished;
 
-    /*FILE *fUsage = fopen("gpu_log.csv", "w");
-    if (!fUsage) {
-        perror("fopen");
-        exit(1);
-    }*/
-
     fprintf(fUsage, "time_step,gpu_id,utilization_%%,power_W,temperature,tx,rx\n");
     fflush(fUsage);
 
@@ -710,19 +733,39 @@ void* resourceMonitoring(void *finished){
 
 
     // [MONITOR INITIALIZATION]
-    schInfo->gpuUtilization = (unsigned int (*)[MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuUtilization));
-    schInfo->gpuPower = (double (*)[MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuPower));
-    schInfo->gpuTemperature = (unsigned int (*)[MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuTemperature));
-    schInfo->gpuPCIeThroughput = (unsigned int (*)[MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuPCIeThroughput));
+    schInfo->gpuUtilization = (unsigned int (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuUtilization));
+    schInfo->gpuPower = (double (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuPower));
+    schInfo->gpuTemperature = (unsigned int (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuTemperature));
+    schInfo->gpuPCIeThroughput = (unsigned int (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuPCIeThroughput));
+    schInfo->nMonitored = 0;
+    schInfo->monitorIndex = 0;
+    
+    // allocate memory for final monitored data
+    schInfo->totalPowerConsumption = 0.0;
+    schInfo->totalPowerConsumptionPerGPU = (double*)malloc(device_count * sizeof(double));
+    schInfo->totalUtilization = 0;
+    schInfo->totalUtilizationPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->temperatureSum = 0;
+    schInfo->temperatureSumPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->totalThroughput = 0;
+    schInfo->totalThroughputPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->totalAllocationArea = 0;
+    schInfo->allocationTimePerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
 
+    for(unsigned int i = 0; i < device_count; i++){
+
+        schInfo->totalPowerConsumptionPerGPU[i] = 0.0;
+        schInfo->totalUtilizationPerGPU[i] = 0;
+        schInfo->temperatureSumPerGPU[i] = 0;
+        schInfo->totalThroughputPerGPU[i] = 0;
+        schInfo->allocationTimePerGPU[i] = 0;
+
+    }
 
     while((*finish) == 0){
 
         usleep(INTERVAL_US); // 1 seconds
         timer += 1; // update timer
-
-        size_t tmpUsageGPUs = 0;
-        int workingGPUs = 0;
 
         // store info obtained from nvidia-smi
         for (unsigned int i = 0; i < device_count; i++) {
@@ -757,31 +800,44 @@ void* resourceMonitoring(void *finished){
 
 
             // store utilization in sch info and update step
-            schInfo->gpuUtilization[i][0] = util.gpu;
-            schInfo->gpuPower[i][0] = power / 1000.0;
-            schInfo->gpuTemperature[i][0] = temperature;
-            schInfo->gpuPCIeThroughput[i][0] = tx_throughput + rx_throughput;
+            schInfo->gpuUtilization[i][schInfo->monitorIndex] = util.gpu;
+            schInfo->gpuPower[i][schInfo->monitorIndex] = power / 1000.0;
+            schInfo->gpuTemperature[i][schInfo->monitorIndex] = temperature;
+            schInfo->gpuPCIeThroughput[i][schInfo->monitorIndex] = tx_throughput + rx_throughput;
 
-            /*// if gpu is being utilized, compute current mean usage
-            if(util.gpu > 0){
+            /* Interesting data to compute:
+                - Mean utilization per each GPU
+                - Mean utilization of all GPUs
+
+                - Mean utilization of each GPU when allocated
+                - Mean utilization of all GPUs when allocated
+
+                - Total energy consumtpion
+                - Total bandwitdh usage
+                
+                - Mean temperature
             
-                tmpUsageGPUs += util.gpu; 
-                workingGPUs ++;
-            }
+                Standard deviation for each value too
+            */
+            schInfo->totalUtilization += util.gpu;
+            schInfo->totalUtilizationPerGPU[i] += util.gpu;
 
+            schInfo->totalPowerConsumption += power / 1000.0;
+            schInfo->totalPowerConsumptionPerGPU[i] += power / 1000.0;
+            
+            schInfo->temperatureSum += temperature;
+            schInfo->temperatureSumPerGPU[i] += temperature;
 
-            // energy consumption
-            usagePower += schInfo->gpuPower[i][0];*/
+            schInfo->totalAllocationArea += (int)schInfo->avGPUs[i];
+            schInfo->allocationTimePerGPU += (int)schInfo->avGPUs[i];
         }
 
-        // update mean value
-        /*if(workingGPUs > 0){
-            tmpUsageGPUs /= workingGPUs;
-            usageGPUs += tmpUsageGPUs;
-            registeredUsages ++;
-        }*/
-
         fflush(fUsage);  // ensure data is written
+
+        // update monitorization data
+        schInfo->nMonitored ++;
+        schInfo->monitorIndex ++;
+        schInfo->monitorIndex %= JOB_MONITOR_STEPS;
     }
 
     // 
@@ -801,7 +857,7 @@ void* jobManager(void *voidJobsTimeline){
 
     // launch jobs
     size_t job = 0;
-    while(job < jobsTimeline->nJobs){
+    while(job < (size_t)(jobsTimeline->nJobs)){
 
         // get job launcher
         jobLauncher = &(jobsTimeline->jobLaunchers[job]);
@@ -831,6 +887,7 @@ void selectFirstAvailableGPUs(size_t *selectedGPUs, size_t nLaunchGPUs, schInfo_
     size_t gpuId = 0;
     size_t jobGPU = 0;
     
+    // loop over necessary number of GPUs, and select available ones in order
     while(jobGPU < nLaunchGPUs){
 
         // allocate the gpu for the job
@@ -857,12 +914,12 @@ void manageReconfigurations(schInfo_t *schInfo){
     // get info in the queue of jobs being reconfigured
     jobQueue_t *reconfiguringQueue = &(schInfo->reconfiguringJobs);
     size_t nReconfiguringJobs = getNumberOfJobsInQueue(reconfiguringQueue); 
-
     size_t iJob;
 
     // loop over jobs that are being reconfigured
     for(iJob = 0; iJob<nReconfiguringJobs; iJob ++){
 
+        // get job
         job = getJobFromQueue(reconfiguringQueue, iJob);
 
         // check whether job finished the reconfiguration
@@ -873,11 +930,10 @@ void manageReconfigurations(schInfo_t *schInfo){
             jobControl = job->jobControl;
 
             // get previous and current job resources
-            jobResources_t *reconfJobResources, *jobResources;
-            reconfJobResources = jobControl->reconfJobResources;
-            jobResources = jobControl->jobResources;
+            jobResources_t *reconfJobResources = jobControl->reconfJobResources; // new job resources
+            jobResources_t *jobResources = jobControl->jobResources; // old job resources
 
-            // deallocate job old resources
+            // deallocate job old resources (resources in jobResources and not in reconfjobResources)
             jobResources_t *oldJobResources = (jobResources_t*)calloc(1,sizeof(jobResources_t));
             
             // as maximum, the number of GPUs to be deallocated is the previously allocated number of GPUs
@@ -885,34 +941,33 @@ void manageReconfigurations(schInfo_t *schInfo){
             oldJobResources->nGPUs = 0; // we don't know how much GPUs will be deallocated
             
             // find the GPUs to be deallocaated (jobs which are not part of the new resources)
-            // TODO (I need to test this) // TESTED?
-            int next = 0; // index to store the next GPU
             for(size_t i = 0; i<jobResources->nGPUs; i++){
                 
-                // for each GPU in the previous allocated ones, check whether it is in the new ones
-                int founded = 0;
+                // loop over reconf GPUs and check if GPU appears
+                int found = 0;
                 for(size_t j = 0; j<reconfJobResources->nGPUs; j++){
 
-                    if(jobResources->idGPUs[i] == reconfJobResources->idGPUs[j]) founded = 1;
+                    // check if appears
+                    if(jobResources->idGPUs[i] == reconfJobResources->idGPUs[j]) 
+                        found = 1;
                 }
 
-                // if not founded, store GPU to be deallocated
-                if(!founded){
+                // if not found, store GPU to be deallocated
+                if(!found){
 
-                    oldJobResources->idGPUs[next] = jobResources->idGPUs[i];
+                    oldJobResources->idGPUs[oldJobResources->nGPUs] = jobResources->idGPUs[i];
                     oldJobResources->nGPUs ++; // add one gpu to be deallocated
-                    next++;
                 }
             }
 
-            // deallocate resources
+            // finish job reconfiguration (leave reconfiguration queue)
+            jobFinishedReconfiguration(job, iJob, oldJobResources);
+
+            // deallocate resources (RMS level)
             deallocateResources(schInfo, oldJobResources);
 
-            // deallocate structure of oldJobResources
+            // deallocate structure of oldJobResources (system memory level)
             deallocateJobResourcesStruct(&oldJobResources);
-
-            // finish job reconfiguration (leave reconfiguration queue)
-            jobFinishedReconfiguration(job, iJob);
 
             // update values for the loop indexing
             nReconfiguringJobs --;
@@ -926,9 +981,7 @@ size_t manageJobsFinish(schInfo_t *schInfo){
 
     // helper variables
     job_t *job;
-    jobLauncher_t *jobLauncher;
     jobResources_t *jobResources;
-    jobMonitoring_t *jobMonitor;
     size_t iJob, nRunningJobs, nJobsFinished = 0;
 
     // get queue of running jobs
@@ -941,7 +994,6 @@ size_t manageJobsFinish(schInfo_t *schInfo){
 
         // get job information
         job = getJobFromQueue(runningQueue, iJob);
-        jobLauncher = job->jobLauncher;
         jobResources = job->jobControl->jobResources;
 
 
@@ -955,22 +1007,8 @@ size_t manageJobsFinish(schInfo_t *schInfo){
             // finish job
             finishJob(job, iJob);
 
-            // deallocate resources
+            // deallocate resources (RMS level)
             deallocateResources(schInfo, jobResources);
-
-            // TODO
-            // free job resources (should be a function?) [TODO]
-            //free(jobResources->idGPUs);
-            //free(jobResources);
-            //free(jobControl->prevJobResources->idGPUs);
-            //free(jobControl->prevJobResources);
-            //
-            //free(job->jobControl);
-            //
-            //free(job->jobLauncher->argv);
-            //free(job->jobLauncher);
-            
-            // [TODO]: free job pointers (jobControl, job, jobLauncher...)
 
             printf(" -- [RMS] Job %zu finished\n", job->jobId);
             fflush(stdout);

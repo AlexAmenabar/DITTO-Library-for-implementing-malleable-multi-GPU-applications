@@ -35,13 +35,9 @@ typedef struct state_t {
 /// @brief Enumeration that indicates the pattern for distributing data along GPUs
 enum transmissionPatternsEnum {
     
-    nonettp,
     entire,
     simple,
-    p2pSimple,
-    complex,
-    p2pComplex,
-    custom
+    complex
 };
 
 /// @brief Enum indicating what to do with the remaining elements (nElements % nGPUs)
@@ -241,7 +237,8 @@ size_t* getGPUIds();
 cudaStream_t* getCudaStreams();
 
 ncclComm_t* getNCCLComms();
-
+void initNCCLComm(jobResources_t *jobResources);
+void freeNCCLComm(jobResources_t *jobResources);
 
 /* [RECONFIGURATIONS] */
 

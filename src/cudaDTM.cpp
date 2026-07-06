@@ -617,7 +617,6 @@ void reconfExpand(DTI_t *DTI){
     cudaError_t err;
 
     cudaStream_t *cudaStreams = getCudaStreams();
-    jobControl_t *jobControl = getJobControl();
     state_t *state = getState();
 
     // get resource data
@@ -625,12 +624,9 @@ void reconfExpand(DTI_t *DTI){
     jobResources_t *reconfResources = state->reconfJobResources;
     
     size_t *idGPUs = resources->idGPUs;
-    size_t *idReconfGPUs = reconfResources->idGPUs;
 
     size_t nGPUs = resources->nGPUs; 
     size_t nReconfGPUs = reconfResources->nGPUs;
-
-    void **prevGPUData = DTI->gpuData;
 
     // compute the number of GPUs to distribute information from each GPU
     size_t M = nReconfGPUs / nGPUs;
@@ -820,7 +816,6 @@ void reconfShrink(DTI_t *DTI){
     cudaError_t err;
 
     cudaStream_t *cudaStreams = getCudaStreams();
-    jobControl_t *jobControl = getJobControl();
     state_t *state = getState();
 
     // get resource data
@@ -833,17 +828,20 @@ void reconfShrink(DTI_t *DTI){
     size_t nGPUs = resources->nGPUs; 
     size_t nReconfGPUs = reconfResources->nGPUs;
 
-    void **prevGPUData = DTI->gpuData;
-
     // compute the number of GPUs to distribute information from each GPU
     size_t M =  nGPUs / nReconfGPUs;
 
     // allocate memory in the destination GPUs
     for(i = 0; i<nReconfGPUs; i++){
 
+        //printf("Allocating on GPU %zu (%zu): %zu\n", idReconfGPUs[i], i, DTI->nPerGPU[i] * sizeof(float));
+
         // allocate memory in the destination GPU
         cudaSetDevice(idReconfGPUs[i]);
         err = cudaMalloc(&(DTI->gpuData[i]), DTI->nPerGPU[i] * sizeof(float)); 
+
+        if (err != cudaSuccess) 
+            printf("Cuda malloc failed: %s\n", cudaGetErrorString(err));
     }
 
 
@@ -855,6 +853,9 @@ void reconfShrink(DTI_t *DTI){
     // loop over GPUs for sending data to the GPUs
     #pragma omp parallel for num_threads(n_threads) private(err, i, j)
     for(i = 0; i<nGPUs; i++){
+
+        err = cudaSuccess;
+
 
         // source GPU
         size_t srcDev = idGPUs[i];
@@ -881,6 +882,7 @@ void reconfShrink(DTI_t *DTI){
         if(canAccess)
             cudaDeviceEnablePeerAccess(dstDev, 0);
 
+
         // loop over the partitions and copy each one
         if(commType.transferSteps != stridedComm){
 
@@ -895,7 +897,7 @@ void reconfShrink(DTI_t *DTI){
                 offset = (offset / prevN);
 
                 if(nReconfGPUs > 1)
-                    offset %= nReconfGPUs;
+                    offset %= M;
 
                 //printf(" Prev offset of GPU %zu (%zu) = %zu, normalized offset = %zu  (prevN = %zu, n = %zu, prev_offset = %zu, N = %zu, nPartitions = %zu)\n", 
                 //        srcDev, i, DTI->prev_offsetPerPartition[i][nP], offset, prevN, n, DTI->prev_offsetPerPartition[i][nP], DTI->N, nPartitions);
@@ -907,9 +909,11 @@ void reconfShrink(DTI_t *DTI){
                 size_t offDst = n * nP + offset * prevN;
                 size_t offSrc = prevN * nP;
 
-                //printf(" canAccess = %d from %zu to %zu: %zu elements (prev N = %zu, M = %zu)\n", canAccess, srcDev, dstDev, prevN, n, M);
-                //printf(" -- prev[%zu:%zu], post[%zu:%zu]\n", srcDev, offSrc, dstDev, offDst);
-                //fflush(stdout);
+                if(err != cudaSuccess){
+                    printf(" canAccess = %d from %zu to %zu: %zu elements (prev N = %zu, M = %zu)\n", canAccess, srcDev, dstDev, prevN, n, M);
+                    printf(" -- prev[%zu:%zu], post[%zu:%zu]\n", srcDev, offSrc, dstDev, offDst);
+                    fflush(stdout);
+                }
 
 
                 // copy the partition from the source to the destination
@@ -923,7 +927,10 @@ void reconfShrink(DTI_t *DTI){
                     // cpy data directly to a temporal buffer
                     if(commType.transmissionType == asyncComm){
                         
-                        cudaMemcpyPeerAsync(dst, dstDev, src, srcDev, nBytes, cudaStreams[i]);
+                        err = cudaMemcpyPeerAsync(dst, dstDev, src, srcDev, nBytes, cudaStreams[i]);
+
+                        if (err != cudaSuccess) 
+                            printf("Mem cpy failed: %s\n", cudaGetErrorString(err));
                     }
                     else{
 
@@ -938,12 +945,15 @@ void reconfShrink(DTI_t *DTI){
                     // cpy data directly to a temporal buffer
                     if(commType.transmissionType == asyncComm){
                         
-                        cudaMemcpyAsync(dst, src, nBytes, cudaMemcpyDeviceToDevice, cudaStreams[i]);
+                        err = cudaMemcpyAsync(dst, src, nBytes, cudaMemcpyDeviceToDevice, cudaStreams[i]);
                         //cudaMemcpyPeerAsync(dst, dstDev, src, srcDev, DTI->nPerGPU[i] * (size_t)sizeof(float), cudaStreams[i]);
+
+                        if (err != cudaSuccess) 
+                            printf("Mem cpy (self) failed: %s\n", cudaGetErrorString(err));
                     }
                     else{
 
-                        cudaMemcpy(dst, src, nBytes, cudaMemcpyDeviceToDevice);
+                        err = cudaMemcpy(dst, src, nBytes, cudaMemcpyDeviceToDevice);
                         //cudaMemcpyPeer(dst, dstDev, src, srcDev, DTI->nPerGPU[i] * (size_t)sizeof(float)); // copy P2P
                         
                         // free old GPU data
@@ -974,18 +984,25 @@ void reconfShrink(DTI_t *DTI){
             offset = (offset / prev_nPartitionGPU);
 
             if(nReconfGPUs > 1)
-                offset %= nReconfGPUs;
+                offset %= M;
 
-            //printf(" Src dev = %zu, dst dev = %zu, offset %zu (prevN %zu, N %zu, w %zu, h %zu, spitch %zu dpitch %zu)\n", 
-            //        srcDev, dstDev, offset, prev_nPartitionGPU, nPartitionGPU, w / size, h, spitch / size, dpitch / size);
-            //fflush(stdout);
+            if(err != cudaSuccess){
+            
+                printf(" Src dev = %zu, dst dev = %zu, offset %zu (prevN %zu, N %zu, w %zu, h %zu, spitch %zu dpitch %zu)\n", 
+                    srcDev, dstDev, offset, prev_nPartitionGPU, nPartitionGPU, w / size, h, spitch / size, dpitch / size);
+                fflush(stdout);
+            }
 
             // src and dst pointers
             void *dst = (char*)(DTI->gpuData[dstDevIndex]) + offset * prev_nPartitionGPU * size;
             void *src = (char*)(DTI->prevGpuData[i]);
 
-            if(commType.transmissionType == asyncComm)
+            if(commType.transmissionType == asyncComm){
                 err = cudaMemcpy2DAsync(dst, dpitch, src, spitch, w, h, cudaMemcpyDeviceToDevice, cudaStreams[i]);
+            
+                if (err != cudaSuccess) 
+                    printf("Mem cpy (2D) failed: %s\n", cudaGetErrorString(err));
+            }
 
             else{
                 err = cudaMemcpy2D(dst, dpitch, src, spitch, w, h, cudaMemcpyDeviceToDevice);
@@ -1007,6 +1024,9 @@ void reconfShrink(DTI_t *DTI){
             
             cudaStreamSynchronize(cudaStreams[i]);
             err = cudaFree(DTI->prevGpuData[i]); 
+
+            if (err != cudaSuccess) 
+                printf("Free failed: %s\n", cudaGetErrorString(err));
         }
     }
 }
@@ -1024,7 +1044,6 @@ void reconfN2N(DTI_t *DTI){
     cudaError_t err;
 
     cudaStream_t *cudaStreams = getCudaStreams();
-    jobControl_t *jobControl = getJobControl();
     state_t *state = getState();
 
     // get resource data
@@ -1032,11 +1051,7 @@ void reconfN2N(DTI_t *DTI){
     jobResources_t *reconfResources = state->reconfJobResources;
     
     size_t *idGPUs = resources->idGPUs;
-    size_t *idReconfGPUs = reconfResources->idGPUs;
-
     size_t nGPUs = resources->nGPUs; 
-
-    void **prevGPUData = DTI->gpuData;
 
 
     // set number of threads
@@ -1127,66 +1142,6 @@ void reconfN2N(DTI_t *DTI){
                 cudaFree(DTI->prevGpuData[i]);
             }
         }
-
-
-        // loop over the partitions and copy each one
-        /*for(size_t nP = 0; nP < nPartitions; nP++){
-
-            // get the number of elements in the partition
-            size_t n = DTI->prev_nPerPartition[i][nP];
-            
-
-            // compute offsets
-            size_t offDst = n * nP;
-            size_t offSrc = n * nP;
-
-            //printf(" canAccess = %d from %zu to %zu: %zu elements (offSrc = %zu, offDst = %zu)\n", canAccess, srcDev, dstDev, n, offSrc, offDst);
-            //printf(" -- prev[%zu:%zu], post[%zu]\n", srcDev, offSrc, dstDev);
-            //fflush(stdout);
-
-
-            // copy the partition from the source to the destination
-            void *dst = (char*)(DTI->gpuData[dstDevIndex]) + offDst * DTI->size;
-            void *src = (char*)(DTI->prevGpuData[i]) + offSrc * DTI->size;
-            size_t nBytes = n * DTI->size;
-
-            // if can access, move data directly, else, use the CPU
-            if (canAccess){
-                
-                // cpy data directly to a temporal buffer
-                if(commType.transmissionType == asyncComm){
-                    
-                    err = cudaMemcpyPeerAsync(dst, dstDev, src, srcDev, nBytes, cudaStreams[i]);
-                }
-                else{
-
-                    err = cudaMemcpyPeer(dst, dstDev, src, srcDev, nBytes); // copy P2P
-                    
-                    // free old GPU data
-                    cudaFree(DTI->prevGpuData[i]);
-                }
-
-                if (err != cudaSuccess) 
-                    printf("Cpy failed in expand: %s\n", cudaGetErrorString(err));
-            }
-            else if(srcDev == dstDev){
-
-                // cpy data directly to a temporal buffer
-                if(commType.transmissionType == asyncComm){
-                    
-                    cudaMemcpyAsync(dst, src, nBytes, cudaMemcpyDeviceToDevice, cudaStreams[i]);
-                    //cudaMemcpyPeerAsync(dst, dstDev, src, srcDev, DTI->nPerGPU[i] * (size_t)sizeof(float), cudaStreams[i]);
-                }
-                else{
-
-                    cudaMemcpy(dst, src, nBytes, cudaMemcpyDeviceToDevice);
-                    //cudaMemcpyPeer(dst, dstDev, src, srcDev, DTI->nPerGPU[i] * (size_t)sizeof(float)); // copy P2P
-                    
-                    // free old GPU data
-                    cudaFree(DTI->prevGpuData[i]);
-                }
-            }
-        }*/
     }
 
     // deallocate old memory

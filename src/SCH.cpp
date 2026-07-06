@@ -11,28 +11,27 @@
 #include "jobQueue.hpp"
 #include "eventQueue.hpp"
 
-
-// This algorithm launches a job if possible with the maximum number of available resources
+// Scheduling policy: launch any possible job
+// Allocation policy: select first available GPUs 
 void greedy(schInfo_t *schInfo){
 
     // helper variables
     job_t *job;
     jobLauncher_t *jobLauncher;
     jobResources_t *jobResources;
-    size_t jobType, nReqGPUs, nReqMinGPUs, iJob, nLaunchGPUs, estimatedDuration;
+    size_t jobType, nReqGPUs, nReqMinGPUs, iJob, nLaunchGPUs;
 
     // get pending jobs queue information
     jobQueue_t *pendingQueue = &(schInfo->pendingJobs);
     size_t nPendingJobs = getNumberOfJobsInQueue(pendingQueue);
     
-
     // loop over pending jobs and check whether any job can be scheduled
     for(iJob = 0; iJob<nPendingJobs; iJob++){
 
-        // get job from pending queue (execute any job)
+        // get job from pending queue
         job = getJobFromQueue(pendingQueue, iJob);
         
-        // get job information
+        // get job structures
         jobLauncher = job->jobLauncher;
         jobType = jobLauncher->jobType;
 
@@ -44,10 +43,6 @@ void greedy(schInfo_t *schInfo){
         if(jobType == MOLDABLE || jobType == FLEXIBLE){
             nReqMinGPUs = jobLauncher->nReqMinGPUs;
         }
-
-        // estimated job duration
-        estimatedDuration = jobLauncher->estimatedDuration;
-
 
         // [SCHEDULING POLICY] : launch, if possible, using all the GPUs the job wants
         // launch using the maximum number of GPUs possible
@@ -63,7 +58,7 @@ void greedy(schInfo_t *schInfo){
         // launch job if possible
         if(nLaunchGPUs){
 
-            // allocate resources for the job
+            // allocate resources for the job (refactorize?)
             jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
             jobResources->nGPUs = nLaunchGPUs;
             jobResources->idGPUs = (size_t*)malloc(nLaunchGPUs * sizeof(size_t));
@@ -72,7 +67,7 @@ void greedy(schInfo_t *schInfo){
             // find available GPUs and update system state // [THIS IS A POLICY TOO] -- refactorize?
             selectFirstAvailableGPUs(jobResources->idGPUs, nLaunchGPUs, schInfo);
 
-            // allocate resources for the job
+            // allocate resources for the job (RMS level)
             allocateResources(schInfo, jobResources);
 
             // launch job
