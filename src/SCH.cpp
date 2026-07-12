@@ -63,22 +63,22 @@ void greedy(schInfo_t *schInfo){
             jobResources->nGPUs = nLaunchGPUs;
             jobResources->idGPUs = (size_t*)malloc(nLaunchGPUs * sizeof(size_t));
             
-            // decide where the job will be executed
-            // find available GPUs and update system state // [THIS IS A POLICY TOO] -- refactorize?
+            // select the GPUs for the job
             selectFirstAvailableGPUs(jobResources->idGPUs, nLaunchGPUs, schInfo);
 
-            // allocate resources for the job (RMS level)
-            allocateResources(schInfo, jobResources);
-
             // launch job
-            launchJob(job, iJob, jobResources);
+            launchJob(schInfo, job, iJob, jobResources);
 
             // print information of the job
+            
+            
+            pthread_mutex_lock(&printLock);
             printf(" -- [RMS] Launching job %zu (id %zu) with %zu GPUs (", iJob, job->jobId, nLaunchGPUs);
             for(size_t g = 0; g<job->jobControl->jobResources->nGPUs; g++)
                 printf(" %zu", job->jobControl->jobResources->idGPUs[g]);
             printf(")\n");
             fflush(stdout);
+            pthread_mutex_unlock(&printLock);
 
             // update number of pending jobs
             nPendingJobs--;

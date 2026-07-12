@@ -4,7 +4,7 @@
 #include <pthread.h>
 
 
-#define MAX_JOBS 1000
+#define MAX_JOBS 2000
 
 
 

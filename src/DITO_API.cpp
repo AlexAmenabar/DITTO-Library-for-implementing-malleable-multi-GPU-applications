@@ -50,10 +50,7 @@ void initDITTO(void *jobControl){
 
     // TODO: This should me moved to a cuda dependant place, and initialized only when communications are asynchronous
     appData->cudaStreams = (cudaStream_t*)malloc(8 * sizeof(cudaStream_t)); // 8 because we consider that it is the maximum number of GPUs we will use for now, in intra-node configurations
-    initializeStreams(appData->jobControl->jobResources);
-
-    appData->ncclComms = (ncclComm_t*)malloc(8 * sizeof(ncclComm_t));
-    initializeNCCLComm(appData->jobControl->jobResources);
+    initializeStreams(appData->state->jobResources);
 
     // initialize DTI data
     nDTI = 0;
@@ -68,9 +65,6 @@ void freeDITTO(){
 
     // destroy streams
     destroyStreams(getState()->jobResources);
-
-    // finish 
-    destroyNCCLComm(getState()->jobResources);
 }
 
 jobControl_t* getJobControl(){
@@ -324,7 +318,11 @@ void reconfigure(reconfDirEnum reconfDir){
     // notify that the reconfiguration has been done
     notifyReconfigurationDone(getJobControl());
 
+
+    pthread_mutex_lock(&(printLock));
     printf("%lf %lf %lf %lf ", tConf, tComm, tGPU2CPU, tCPU2GPU);
+    pthread_mutex_unlock(&(printLock));
+
 }
 
 // TODO

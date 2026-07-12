@@ -7,7 +7,8 @@
 #include "jobQueue.hpp"
 #include "eventQueue.hpp"
 
-#define JOB_MONITOR_STEPS 100
+#define JOB_MONITOR_STEPS 10
+#define DECISION_JOB_MONITOR_STEPS 5
 #define INTERVAL_US 1000000  // 0.1 seconds
 
 
@@ -142,14 +143,20 @@ typedef struct jobMonitoring_t {
 
     // arrays to store different parameters related to job allocated GPUs
     // [nGPUs x 100 time steps]
-    unsigned int (*gpuUsage)[JOB_MONITOR_STEPS]; 
-    unsigned int (*gpuTemperature)[JOB_MONITOR_STEPS];
-    unsigned int (*gpuEnergyConsumption)[JOB_MONITOR_STEPS];
-    unsigned int (*gpuPCIeThroughput)[JOB_MONITOR_STEPS];
+    unsigned int (*gpuUsage)[DECISION_JOB_MONITOR_STEPS]; 
+    unsigned int (*gpuTemperature)[DECISION_JOB_MONITOR_STEPS];
+    unsigned int (*gpuEnergyConsumption)[DECISION_JOB_MONITOR_STEPS];
+
+    unsigned int (*gpuPCIeThroughput)[DECISION_JOB_MONITOR_STEPS];
+    unsigned int (*gpuNVLinkThroughput)[DECISION_JOB_MONITOR_STEPS];
+
+    unsigned int (*gpuBandPCIe)[DECISION_JOB_MONITOR_STEPS];
+    unsigned int (*gpuBandNVLink)[DECISION_JOB_MONITOR_STEPS];
+    
 
     // current step and the array length
     size_t step; 
-    size_t steps = JOB_MONITOR_STEPS;
+    size_t steps;
 
     // usage summarized
     size_t finalUsageGPUs;
@@ -197,38 +204,85 @@ struct schInfo_t {
     // Pointers to the scheduling and reconfiguration policies
     void (*sched)(schInfo_t *schInfo);
     void (*rconf)(schInfo_t *schInfo);
+    int invoqueScheduler;
+    pthread_mutex_t invoqueSchedulerLock;
 
     // System resources and availability
     size_t nGPUs; // total number of GPUs
     size_t nAvGPUs; // number of available GPUs
     char *avGPUs; // GPU available (binary)
     unsigned int *gpuJob; // job that has the allocation of the GPU 
+    unsigned int *nvLinkCount;
 
     // GPU topology info
     int *gpuTopology; // information by topo -m
     int *gpuTopologyRank; // information by rank (more accurate) TODO: not working
 
-    // Monitoring:
-    // information of all resources is monitored by the RMS, and then each job
-    // takes only the information it needs
+    // real time monitor data
     unsigned int (*gpuUtilization) [JOB_MONITOR_STEPS]; // (nGPUs)? arrays of MONITOR_STEPS
     double (*gpuPower) [JOB_MONITOR_STEPS];
     unsigned int (*gpuTemperature) [JOB_MONITOR_STEPS];
     unsigned int (*gpuPCIeThroughput) [JOB_MONITOR_STEPS];
+    unsigned int (*gpuNVLinkThroughput) [JOB_MONITOR_STEPS];
+
     size_t nMonitored;
     size_t monitorIndex;
 
-    // mmonitored data for final statistics
+
+    // accumulated monitored data
+    //power consumption
     double totalPowerConsumption;
     double *totalPowerConsumptionPerGPU;
+    // utilization
     unsigned int totalUtilization;
     unsigned int *totalUtilizationPerGPU;
+    // temperature
     unsigned int temperatureSum;
     unsigned int *temperatureSumPerGPU;
-    unsigned int *totalThroughput; // Think about this
-    unsigned int *totalThroughputPerGPU; // Think about this
+    // PCIe throughput
+    unsigned int totalThroughputPCIe; 
+    unsigned int *totalThroughputPCIePerGPU;
+    // NVLink throughput
+    unsigned int totalThroughputNVLink;
+    unsigned int *totalThroughputNVLinkPerGPU;
+    // allocation time
     unsigned int totalAllocationArea;
     unsigned int *allocationTimePerGPU;
+    // number of reconfigurations
+    unsigned int nReconfigurations;
+    unsigned int nExpands;
+    unsigned int nShrinks;
+    unsigned int nKeeps;
+
+
+    // final results per batch
+    double *finalThroughput;
+    // utilization
+    double *finalUtilization;
+    double **finalUtilizationPerGPU;
+    // power consumption
+    double *finalPowerConsumption;
+    double **finalPowerConsumptionPerGPU;
+    // temperature
+    double *finalTemperatureSum;
+    double **finalTemperatureSumPerGPU;
+    // PCIe throughput
+    double *finalThroughputPCIe; 
+    double **finalThroughputPCIePerGPU;
+    // NVLink throughput
+    double *finalThroughputNVLink; 
+    double **finalThroughputNVLinkPerGPU;
+    // allocation time
+    double *finalAllocationArea;
+    double **finalAllocationTimePerGPU;  
+    // number of reconfiugration
+    double *finalNReconfigurations;
+    double *finalNExpands;
+    double *finalNShrinks;
+    double *finalNKeeps;
+    // job execution and wait time
+    double *finalMeanExecutionTime;
+    double *finalMeanWaitTime;
 
 
     // Users in the system
@@ -250,6 +304,11 @@ struct schInfo_t {
     // TODO: not implemented yet
     // queue of events
     eventQueue_t eventQueue;
+
+    // locks
+
+    // hint: GPUs needed 
+    pthread_mutex_t lockTimer;
 };
 
 /// Structure previous to enter in the pending queue
@@ -295,6 +354,10 @@ extern int *gpuTopology;
 extern int *gpuTopologyRank;
 extern size_t gNGPUs;
 
+// lock for printf
+extern pthread_mutex_t printLock;
+
+
 
 
 // [Job management]
@@ -312,16 +375,16 @@ void initializeTopology(schInfo_t *schInfo, char *topoFile);
 void addPendingJob(jobLauncher_t *jobLauncher);
 
 /// Start running a job
-void launchJob(job_t *job, size_t pendingIndex, jobResources_t *jobResources);
+void launchJob(schInfo_t *schInfo, job_t *job, size_t pendingIndex, jobResources_t *jobResources);
 
 /// Schedule a reconfiguration to a running job
-void scheduleReconfiguration(job_t *job, size_t jobIndex, jobResources_t *jobResources);
+void scheduleReconfiguration(schInfo_t *schInfo, job_t *job, size_t jobIndex, jobResources_t *jobResources);
 
 /// Manage the finalization of the job reconfiguration
-void jobFinishedReconfiguration(job_t *job, size_t jobIndex, jobResources_t *deallocatedResources);
+void jobFinishedReconfiguration(schInfo_t *schInfo, job_t *job, size_t jobIndex);
 
 /// Job finished
-void finishJob(job_t *job, size_t runningJobIndex);
+void finishJob(schInfo_t *schInfo, job_t *job, size_t runningJobIndex);
 
 /// Initialize the job monitor
 jobMonitoring_t* initJobMonitor(jobMonitoring_t *jobMonitor, jobResources_t *jobResources);
@@ -388,17 +451,31 @@ void notifyStartRunning(jobControl_t *jobControl);
 /// Monitor resource data
 void* resourceMonitoring(void *finished);
 
+/// 
+void initResourceMonitor(schInfo_t *schInfo, size_t nBatch);
+
+/// 
+void stepResourceMonitor(schInfo_t *schInfo);
+
+void reinitMonitorAcc(schInfo_t *schInfo);
+
+///
+void destroyResourceMonitor(schInfo_t *schInfo);
+
 /// Add jobs to the pending jobs queue after their arrival time
 void* jobManager(void *voidJobsTimeline);
 
 /// This method finds the first available n GPUs
 void selectFirstAvailableGPUs(size_t *selectedGPUs, size_t nLaunchGPUs, schInfo_t *schInfo);
 
+jobResources_t* findDiffResources(jobResources_t *jobResources, jobResources_t *reconfJobResources);
+
+
 /// Manage reconfigurations
 void manageReconfigurations(schInfo_t *schInfo);
 
 /// Manage jobs finish
-size_t manageJobsFinish(schInfo_t *schInfo);
+void manageJobsFinish(schInfo_t *schInfo);
 
 
 

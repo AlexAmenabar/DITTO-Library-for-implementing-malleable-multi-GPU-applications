@@ -4,7 +4,7 @@
 #include "toy_app_malleable.hpp"
 
 
-__global__ void simulateKernel(float* arr, size_t N, size_t K){
+__global__ void simulateKernel(float* arr, size_t N, size_t K, size_t nGPUs){
 
     size_t threadId = 
         ((size_t)blockIdx.x  + (size_t)gridDim.x  * (size_t)blockIdx.y + (size_t)gridDim.x * (size_t)gridDim.y * (size_t)blockIdx.z) *
@@ -16,7 +16,7 @@ __global__ void simulateKernel(float* arr, size_t N, size_t K){
         float val = arr[threadId];
         float v0 = val, v1 = val, v2 = val, v3 = val;
 
-        for (size_t k = 0; k < K; k++) {
+        for (size_t k = 0; k < K / nGPUs; k++) {
             v0 = v0 * 1.000001f + 0.000001f;
             v1 = v1 * 1.000001f + 0.000001f;
             v2 = v2 * 1.000001f + 0.000001f;
@@ -30,7 +30,7 @@ __global__ void simulateKernel(float* arr, size_t N, size_t K){
 }
 
 
-__global__ void simulateGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K){
+__global__ void simulateGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K, size_t gpu){
 
     size_t threadId = 
         ((size_t)blockIdx.x  + (size_t)gridDim.x  * (size_t)blockIdx.y + (size_t)gridDim.x * (size_t)gridDim.y * (size_t)blockIdx.z) *
@@ -39,12 +39,13 @@ __global__ void simulateGraphKernel(float* arr, size_t N, size_t *n, size_t *off
 
     if(threadId < N){
     
-        float val = arr[threadId];
+        size_t index = threadId + N * gpu;
+        float val = arr[index];
         float v;
 
         for (size_t k = 0; k < K; k++) {
 
-            for(size_t i = 0; i<n[threadId]; i++){
+            for(size_t i = 0; i<n[index]; i++){
         
                 size_t pos = off[i];
                 size_t nodeIndex = indices[pos];
@@ -55,10 +56,10 @@ __global__ void simulateGraphKernel(float* arr, size_t N, size_t *n, size_t *off
             val = val * 0.125f;
         }
 
-        tmpAcc[threadId] = val;
+        tmpAcc[index] = val;
     }
 }
-__global__ void updateNode(float* arr, size_t N, size_t *n, float *tmpAcc){
+__global__ void updateNode(float* arr, size_t N, size_t *n, float *tmpAcc, size_t gpu){
 
     size_t threadId = 
         ((size_t)blockIdx.x  + (size_t)gridDim.x  * (size_t)blockIdx.y + (size_t)gridDim.x * (size_t)gridDim.y * (size_t)blockIdx.z) *
@@ -66,37 +67,54 @@ __global__ void updateNode(float* arr, size_t N, size_t *n, float *tmpAcc){
         ((size_t)threadIdx.x + (size_t)blockDim.x * (size_t)threadIdx.y + (size_t)blockDim.x * (size_t)blockDim.y * (size_t)threadIdx.z);
 
     if(threadId < N){
-    
-        arr[threadId] = (arr[threadId] + tmpAcc[threadId]) / n[threadId];
+
+        size_t index = threadId + N * gpu;
+        arr[index] = (arr[index] + tmpAcc[index]) / n[index];
     }
 }
 
 
 
-void runKernel(float* arr, size_t N, size_t K){
+void runKernel(float* arr, size_t N, size_t K, size_t nGPUs){
 
     size_t threads = 512;
     size_t blocks = (N + threads - 1) / threads;
 
-    simulateKernel<<<blocks, threads>>>(arr, N, K);
+    simulateKernel<<<blocks, threads>>>(arr, N, K, nGPUs);
     cudaDeviceSynchronize();
 }
 
-void runGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K){
+void runGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K, size_t gpu){
 
     size_t threads = 512;
     size_t blocks = (N + threads - 1) / threads;
 
-    simulateGraphKernel<<<blocks, threads>>>(arr, N, n, off, tmpAcc, indices, K);
+    simulateGraphKernel<<<blocks, threads>>>(arr, N, n, off, tmpAcc, indices, K, gpu);     
+    
     cudaDeviceSynchronize();
+
+    // Check for launch errors
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Kernel launch failed: %s\n",
+                cudaGetErrorString(err));
+    }
 }
 
 
-void runUpdateNodesKernel(float* arr, size_t N, size_t *n, float *tmpAcc){
+void runUpdateNodesKernel(float* arr, size_t N, size_t *n, float *tmpAcc, size_t gpu){
 
     size_t threads = 512;
     size_t blocks = (N + threads - 1) / threads;
 
-    updateNode<<<blocks, threads>>>(arr, N, n, tmpAcc);
+    updateNode<<<blocks, threads>>>(arr, N, n, tmpAcc, gpu);
+    
     cudaDeviceSynchronize();
+
+    // Check for launch errors
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Kernel 2 launch failed: %s\n",
+                cudaGetErrorString(err));
+    }    
 }

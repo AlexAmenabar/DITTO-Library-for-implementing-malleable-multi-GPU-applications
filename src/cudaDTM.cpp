@@ -66,6 +66,11 @@ void initializeNCCLComm(jobResources_t *jobResources){
     for (size_t i = 0; i < nGPUs; i++)
         devs[i] = static_cast<int>(idGPUs[i]);
 
+    ncclComm_t *ncclComms = getNCCLComms();
+
+    ncclComms = (ncclComm_t*)malloc(nGPUs * sizeof(ncclComm_t));
+    appData->ncclComms = ncclComms;
+
     ncclCommInitAll(getNCCLComms(), nGPUs, devs.data());
 }
 
@@ -77,6 +82,8 @@ void destroyNCCLComm(jobResources_t *jobResources){
     for (size_t i = 0; i < nGPUs; i++) {
         ncclCommDestroy(comms[i]);
     }
+
+    free(getNCCLComms());
 }
 
 

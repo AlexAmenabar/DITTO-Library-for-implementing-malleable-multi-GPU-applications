@@ -40,9 +40,9 @@ typedef struct appStruct_t {
 
 
 void runCPU(float *arr, size_t N, size_t K);
-void runKernel(float* arr, size_t N, size_t K);
-void runGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K);
-void runUpdateNodesKernel(float* arr, size_t N, size_t *n, float *tmpAcc);
+void runKernel(float* arr, size_t N, size_t K, size_t nGPUs);
+void runGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K, size_t gpu);
+void runUpdateNodesKernel(float* arr, size_t N, size_t *n, float *tmpAcc, size_t gpu);
 
 
 void launch_iterative_app(int argc, void* argv[]);

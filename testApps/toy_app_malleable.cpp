@@ -84,7 +84,7 @@ void simulateIterative(appStruct_t *data){
             cudaSetDevice(idGPUs[j]);
 
             // run kernel
-            runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
+            runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K, nGPUs);     
 
             // synchronize devices
             cudaDeviceSynchronize();
@@ -102,7 +102,7 @@ void simulatePhases(appStruct_t *data){
         // reconfiguration point
         if(checkIfReconfiguration(getJobControl())){
 
-            reconfigure(GPU2GPU);
+            reconfigure(CPU);
         }
 
         // loop over app phases
@@ -129,7 +129,11 @@ void simulatePhases(appStruct_t *data){
                 }*/
 
                 // move data from the GPU to the CPU
-                runCPU((float*)(getDTIByIndex(0)->cpuData), getDTIByIndex(0)->N, data->cpuK);
+                //runCPU((float*)(getDTIByIndex(0)->cpuData), getDTIByIndex(0)->N, data->cpuK);
+                //sleep(data->cpuK);
+
+                size_t time = data->cpuK * 1000;
+                usleep(time);
             }
             // GPU
             else{
@@ -172,7 +176,7 @@ void simulatePhases(appStruct_t *data){
                     cudaSetDevice(getGPUIds()[j]);
 
                     // run kernel
-                    runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K);     
+                    runKernel((float*)(getDTIByIndex(0)->gpuData[j]), getDTIByIndex(0)->nPerGPU[j], data->K, nGPUs);     
 
                     // sync devices
                     cudaDeviceSynchronize();
@@ -232,7 +236,7 @@ void simulateIterativeNCCL(appStruct_t *data){
             cudaSetDevice(idGPUs[i]);
 
             // run kernel
-            runKernel((float*)(getDTIByIndex(0)->gpuData[i]), getDTIByIndex(0)->nPerGPU[i], data->K);     
+            runKernel((float*)(getDTIByIndex(0)->gpuData[i]), getDTIByIndex(0)->nPerGPU[i], data->K, nGPUs);     
 
             // sync devices
             cudaDeviceSynchronize();
@@ -243,7 +247,7 @@ void simulateIterativeNCCL(appStruct_t *data){
         // [communication]
         clock_gettime(CLOCK_MONOTONIC, &startCommunication);
         // check if data should be synchronized
-        if((t+1) % data->nIterationsForCommunications == 0){
+        if((t+1) % data->nIterationsForCommunications == 0 && nGPUs > 1){
 
             // copy data to the GPU 0
             cudaError_t err;
@@ -256,12 +260,15 @@ void simulateIterativeNCCL(appStruct_t *data){
 
             // start NCCL group
             ncclGroupStart();
+
+            //#pragma omp parallel for num_threads (nGPUs)
             for (size_t i = 0; i < nGPUs; i++) {
                 
                 // set device
                 cudaSetDevice(idGPUs[i]);
                 ncclAllReduce(dData[i], dData[i], nPerGPU[i], ncclFloat, ncclSum, comms[i], streams[i]);
             }
+            fflush(stdout);
              
             ncclGroupEnd(); // Aquí es donde NCCL ejecuta la comunicación en paralelo
 
@@ -293,7 +300,12 @@ void simulateIterativeNCCL(appStruct_t *data){
     double comp = etComputation / (double)T;
     double comm = etCommunication / (double)T;
 
-    printf("%lf %lf\n", comp, comm);
+
+    pthread_mutex_lock(&(printLock));
+    printf("%lf %lf %zu\n", comp, comm, T);
+    fflush(stdout);
+    pthread_mutex_unlock(&(printLock));
+
 }
 
 
@@ -347,7 +359,7 @@ void simulateIterativeUnifiedMemory(appStruct_t *data){
             cudaSetDevice(idGPUs[i]);
 
             // run kernel
-            runGraphKernel((float*)(data->gValues), data->N, data->nPerNode, data->offPerNode, data->tmpAcc, data->indices, data->K);     
+            runGraphKernel((float*)(data->gValues), data->N / nGPUs, data->nPerNode, data->offPerNode, data->tmpAcc, data->indices, data->K, i);     
 
             // sync devices
             cudaDeviceSynchronize();
@@ -366,7 +378,7 @@ void simulateIterativeUnifiedMemory(appStruct_t *data){
             cudaSetDevice(idGPUs[i]);
 
             // run kernel
-            runUpdateNodesKernel((float*)(data->gValues), data->N, data->nPerNode, data->tmpAcc);     
+            runUpdateNodesKernel((float*)(data->gValues), data->N / nGPUs, data->nPerNode, data->tmpAcc, i);     
 
             // sync devices
             cudaDeviceSynchronize();
@@ -376,7 +388,11 @@ void simulateIterativeUnifiedMemory(appStruct_t *data){
     clock_gettime(CLOCK_MONOTONIC, &endComputation);
     etComputation += (endComputation.tv_sec - startComputation.tv_sec) + (endComputation.tv_nsec - startComputation.tv_nsec) / 1e9;
 
-    printf("%lf\n", etComputation);
+    pthread_mutex_lock(&(printLock));
+    printf("%lf\n", etComputation);    
+    fflush(stdout);
+    pthread_mutex_unlock(&(printLock));
+
 }
 
 /* Application MAIN functions */
@@ -446,6 +462,7 @@ void launch_iterative_app(int argc, void* argv[]){
     // Initialize DTIs for automatically managing CPU-GPU communications
     DTI_t *appDataDTI;
     if(appData->s > 0)
+        //appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(entire, ordered, commType));
         appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeComplexDTIDescription(complex, ordered, commType, appData->s));
     else
         appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
@@ -551,6 +568,7 @@ void launch_phases_app(int argc, void* argv[]){
     // Initialize DTIs for automatically managing CPU-GPU communications
     DTI_t *appDataDTI;
     if(appData->s > 0)
+        //appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(entire, ordered, commType));
         appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeComplexDTIDescription(complex, ordered, commType, appData->s));
     else
         appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
@@ -590,6 +608,7 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
     // initialize DITTO environment
     // temporal: simulate information received from the scheduler: number of GPUs and identifiers of the GPUs (pass argv to the initDITTO function?)
     initDITTO(argv[argc+1]);
+    initNCCLComm(getState()->jobResources);
 
     appStruct_t *appData = (appStruct_t*)calloc(1, sizeof(appStruct_t));
     appData->N = *(size_t*)argv[0];
@@ -650,7 +669,8 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
     // Initialize DTIs for automatically managing CPU-GPU communications
     DTI_t *appDataDTI;
     if(appData->s > 0)
-        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeComplexDTIDescription(complex, ordered, commType, appData->s));
+        appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(entire, ordered, commType));
+        //appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeComplexDTIDescription(complex, ordered, commType, appData->s));
     else
         appDataDTI = createAutomaticDTI((void*)(appData->arr), appData->N, sizeof(float), "appData", initializeDTIDescription(simple, ordered, commType));
 
@@ -664,14 +684,14 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
 
     // When we want to test network congestion, we want to make the job wait until
     // the rest of jobs start
-    char startRunning = getJobControl()->startRunning; 
+    /*char startRunning = getJobControl()->startRunning; 
     while(!startRunning){
         
         sleep(1);
         pthread_mutex_lock(&(getJobControl()->lockStartRunning));
         startRunning = getJobControl()->startRunning; 
         pthread_mutex_unlock(&(getJobControl()->lockStartRunning));
-    }
+    }*/
 
 
 
@@ -691,7 +711,9 @@ void launch_NCCL_communications_app(int argc, void* argv[]){
         free(appDataDTI->cpuData);
 
     // destroy streams
+    freeNCCLComm(getState()->jobResources);
     freeDITTO();
+
 
     // signal that job finished
     jobFinished(getJobControl());
@@ -737,20 +759,25 @@ void launch_unified_memory_app(int argc, void* argv[]){
 
 
     // allocate unifed memory
-    cudaMallocManaged((void**)&(appData->gValues), N * sizeof(float));
-
-
-    // temporal memory
-    size_t **indices = (size_t**)calloc(N, sizeof(size_t*));
-    size_t *n = (size_t*)calloc(N, sizeof(size_t));
-    size_t tN = 0;
-
-    // allocate memory for indices
-    for(i = 0; i < N; i++){
-
-        indices[i] = (size_t*)calloc(N, sizeof(size_t));
+    cudaError_t err = cudaMallocManaged((void**)&(appData->gValues), N * sizeof(float));
+    
+    if(err != cudaSuccess){
+        printf("err = %s\n", cudaGetErrorString(err));
+        fflush(stdout);
     }
 
+    // initialize
+    for(size_t i = 0; i<N; i++){
+        appData->gValues[i] = (float)(rand() % 100);
+    }
+
+    // create array of indices for each element
+    size_t capacity = (size_t)1024 * (size_t)1024;
+    size_t next = 0;
+
+    size_t *indices = (size_t*)malloc(capacity * sizeof(size_t));
+    size_t *n = (size_t*)calloc(N, sizeof(size_t));
+    size_t tN = 0;
 
     for(i = 0; i<getState()->jobResources->nGPUs; i++){
 
@@ -761,7 +788,7 @@ void launch_unified_memory_app(int argc, void* argv[]){
                 int connected = 0;
                 int val = rand() % 100;
 
-                if(j >= i * (N / nGPUs) && i < (i+1) * (N / nGPUs)){
+                if(l >= i * (N / nGPUs) && l < (i+1) * (N / nGPUs)){
 
                     if(val < pGroup){
                         connected = 1;
@@ -774,18 +801,21 @@ void launch_unified_memory_app(int argc, void* argv[]){
                     }
                 }
 
-                if(connected){
+                if (connected) {
 
-                    indices[j][l] = 1;
-                    n[j] ++;
+                    if (next == capacity) {
+                        capacity *= 2;
+                        indices = (size_t*)realloc(indices,capacity * sizeof(size_t));
+                    }
+
+                    indices[next] = l;
+                    n[j]++;
                     tN ++;
+                    next++;
                 }
             }
         }
     }
-
-    //printf(" Done!\n");
-    //fflush(stdout);
 
     cudaMallocManaged((void**)&(appData->indices), tN * sizeof(size_t));
     cudaMallocManaged((void**)&(appData->nPerNode), N * sizeof(size_t));
@@ -793,29 +823,20 @@ void launch_unified_memory_app(int argc, void* argv[]){
     cudaMallocManaged((void**)&(appData->tmpAcc), N * sizeof(size_t));
 
     // copy indexes to unified memory
-    size_t next = 0;
+    next = 0;
     for(size_t i = 0; i<N; i++){
 
         appData->nPerNode[i] = n[i];
         appData->offPerNode[i] = next;
 
-        for(size_t j = 0; j<N; j++){
+        for(size_t j = 0; j<n[i]; j++){
 
-            if(indices[i][j]){
-                
-                appData->indices[next] = j;
-                next++;
-            }
+            appData->indices[next] = indices[next];
+            next++;
         }
     }
 
-
     free(n);
-    
-    for(i = 0; i<getState()->jobResources->nGPUs; i++){
-        
-        free(indices[i]);
-    }
     free(indices);
 
 
@@ -964,8 +985,13 @@ void launch_reconfs_test_app_new(int argc, void* argv[]){
     reconfigure(reconfDir);
     clock_gettime(CLOCK_MONOTONIC, &end);
     etime = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    
+    
+    pthread_mutex_lock(&(printLock));
     printf("%lf\n", etime);
-
+    fflush(stdout);
+    pthread_mutex_unlock(&(printLock));
+    
 
     // transfer data fron the GPUs to the CPU
     for(i = 0; i<appData->N; i++){
@@ -1136,7 +1162,10 @@ void launch_malloc_test_app(int argc, void* argv[]){
     etimeFirstFree += (endFirstFree.tv_sec - startFirstFree.tv_sec) + (endFirstFree.tv_nsec - startFirstFree.tv_nsec) / 1e9;
 
 
+    pthread_mutex_lock(&(printLock));
     printf("%lf %lf %lf %lf", etimeFirstMalloc, etimeMalloc, etimeFirstFree, etimeFree);
+    fflush(stdout);
+    pthread_mutex_unlock(&(printLock));
 
     // destroy streams
     freeDITTO();
