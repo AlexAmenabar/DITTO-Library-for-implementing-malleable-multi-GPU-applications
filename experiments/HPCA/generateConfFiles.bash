@@ -9,7 +9,7 @@ pIterative=(60 20 20 33)
 pPhases=(20 60 20 33)
 pComm=(20 20 60 33)
 
-policy=(0 1)
+policy=(0)
 
 # Array to store filenames
 filenames=()
@@ -62,7 +62,7 @@ experiments/HPCA/WorkloadsOutput/events_${jobName}.txt \
 experiments/HPCA/WorkloadsOutput/monitor_${jobName}.txt \
 experiments/HPCA/WorkloadsOutput/out_${jobName}.txt \
 10 \
-600
+1800
 EOF
 
             chmod +x "$sbatchFile"

@@ -132,7 +132,11 @@ void simulatePhases(appStruct_t *data){
                 //runCPU((float*)(getDTIByIndex(0)->cpuData), getDTIByIndex(0)->N, data->cpuK);
                 //sleep(data->cpuK);
 
-                size_t time = data->cpuK * 1000;
+                size_t t = rand() % 1000;
+                if(t == 0)
+                    t = 1;
+
+                size_t time = data->cpuK * t;
                 usleep(time);
             }
             // GPU

@@ -127,90 +127,84 @@ int improveN2NTopology(schInfo_t *schInfo, jobResources_t *jobResources, jobReso
     int jobReconfigured = 0;
 
     // compute job score for current configuration
-    size_t currentScore = computeTopologyScore(schInfo, jobResources->nGPUs, jobResources->idGPUs);
-    
+    size_t currentScore;
+    size_t prevGPUScore = 99999;
+
     // loop and improve topology, until no improvements can be done
     while(!finish){
         
+        // update current topoology score
         currentScore = computeTopologyScore(schInfo, reconfJobResources->nGPUs, reconfJobResources->idGPUs);
 
         // flag indicating if a improvement is achieved
         int improved = 0;
 
-        // find the GPU in the current configuration with the worse topological location
+        // initial worst GPU data
         size_t gpuScore = 0;
         size_t gpuIndex = 0;
-        size_t prevGPUIndex = 100;
         size_t gpuId = schInfo->nGPUs;
 
-        // loop over GPUs
+        // loop over GPUs and find the worst one with worst score
         for(size_t i = 0; i<jobResources->nGPUs; i++){
 
             // compute the GPU score
             size_t tmpScore = computeGPUTopologyScore(schInfo, reconfJobResources->nGPUs, reconfJobResources->idGPUs, i);
             
-            // if the GPU score is higher than the found major score, it is the worse 
+            // if the GPU score is worse (higher) than higher found, update 
             if(tmpScore > gpuScore){
                 
                 gpuScore = tmpScore;
-                gpuIndex = i; // index in jobResources->idGPUs
+                gpuIndex = i; // index of the worse GPU
                 gpuId = reconfJobResources->idGPUs[i]; // store old GPU
             }
         }
 
-        
+
         // check whether it can be substituted by a better GPU
-        size_t bestReconfGPU = schInfo->nGPUs;
-        size_t bestScore = currentScore; // we want to improve the current score
+        size_t bestReconfGPU = schInfo->nGPUs; // no GPU selected 
+        size_t bestScore = currentScore; // current score is the best score obtained until now
 
+        // loop over system GPUs and check if they improve the topology score
+        for(size_t i = 0; i<schInfo->nGPUs; i++){
 
-        if(gpuIndex != prevGPUIndex){
+            // if GPU is available, compute score
+            if(schInfo->avGPUs[i]){
 
-            // loop over system GPUs
-            for(size_t i = 0; i<schInfo->nGPUs; i++){
+                // update GPU in reconf job resources
+                reconfJobResources->idGPUs[gpuIndex] = i;
 
-                // if GPU is available, measure
-                if(schInfo->avGPUs[i]){
+                // compute new topology score
+                size_t tmpScore = computeTopologyScore(schInfo, reconfJobResources->nGPUs, reconfJobResources->idGPUs); 
+                
+                // check if this configuration is better
+                if(tmpScore < bestScore){
 
-                    // update reconfJobResources
-                    reconfJobResources->idGPUs[gpuIndex] = i;
-
-                    // compute new topology score
-                    size_t tmpScore = computeTopologyScore(schInfo, reconfJobResources->nGPUs, reconfJobResources->idGPUs); 
-                    
-                    // check if this configuration is better
-                    if(tmpScore < bestScore){
-
-                        bestReconfGPU = i;
-                        bestScore = tmpScore;
-                    }
+                    bestReconfGPU = i;
+                    bestScore = tmpScore;
                 }
             }
-
-            // check wheter a improvement have been found, and in that case, update reconf values
-            if(bestScore < currentScore && bestReconfGPU < schInfo->nGPUs){
-
-                reconfJobResources->idGPUs[gpuIndex] = bestReconfGPU;
-                improved = 1;
-
-                // indicate allocation
-                schInfo->avGPUs[gpuId] = 1; // now this is available
-                schInfo->avGPUs[bestReconfGPU] = 0; // the selected new GPU is no longer available
-
-                // there is a pending reconfiguration
-                jobReconfigured = 1;
-                prevGPUIndex = gpuIndex;
-            }
-            else{
-
-                // set the previous GPU
-                reconfJobResources->idGPUs[gpuIndex] = gpuId;
-                prevGPUIndex = gpuIndex;
-            }
-
-
         }
 
+        // if the best score is better than the current score, update
+        if(bestScore < currentScore){
+
+            reconfJobResources->idGPUs[gpuIndex] = bestReconfGPU;
+            improved = 1;
+
+            // indicate allocation
+            schInfo->avGPUs[gpuId] = 1; // now this is available
+            schInfo->avGPUs[bestReconfGPU] = 0; // the selected new GPU is no longer available
+
+            // there is a pending reconfiguration
+            jobReconfigured = 1;
+            prevGPUScore = gpuScore;
+        }
+        else{
+
+            // set the previous GPU
+            reconfJobResources->idGPUs[gpuIndex] = gpuId;
+            prevGPUScore = gpuScore;
+        }
         
         if(!improved){
             finish = 1;
