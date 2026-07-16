@@ -4,8 +4,8 @@
 #SBATCH --job-name=DITTO_NCCL
 
 # Define the files which will contain the Standard and Error output
-#SBATCH --output=experiments/HPCA/DITTO_NCCL_2.out
-#SBATCH --error=experiments/HPCA/DITTO_NCCL_2.err
+#SBATCH --output=experiments/HPCA/DITTO_NCCL_3.out
+#SBATCH --error=experiments/HPCA/DITTO_NCCL_3.err
 
 # Number of tasks that compose the job
 #SBATCH --ntasks=1
