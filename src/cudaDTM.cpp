@@ -688,7 +688,7 @@ void reconfExpand(DTI_t *DTI){
             // check and enable peer access
             int canAccess = 0;
             cudaSetDevice(srcDev);
-            //cudaDeviceCanAccessPeer(&canAccess, srcDev, dstDev);
+            cudaDeviceCanAccessPeer(&canAccess, srcDev, dstDev);
 
             if(canAccess){
 
@@ -957,7 +957,7 @@ void reconfShrink(DTI_t *DTI){
         // check and enable peer access
         int canAccess = 0;
         cudaSetDevice(srcDev);
-        //cudaDeviceCanAccessPeer(&canAccess, srcDev, dstDev);
+        cudaDeviceCanAccessPeer(&canAccess, srcDev, dstDev);
 
         if(canAccess){
 
@@ -1245,7 +1245,7 @@ void reconfN2N(DTI_t *DTI){
         // check and enable peer access
         int canAccess = 0;
         cudaSetDevice(srcDev);
-        //cudaDeviceCanAccessPeer(&canAccess, srcDev, dstDev);
+        cudaDeviceCanAccessPeer(&canAccess, srcDev, dstDev);
 
         if(canAccess) {
 
