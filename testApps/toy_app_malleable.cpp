@@ -270,7 +270,7 @@ void simulateIterativeNCCL(appStruct_t *data){
                 
                 // set device
                 cudaSetDevice(idGPUs[i]);
-                ncclAllReduce(dData[i], dData[i], nPerGPU[i], ncclFloat, ncclSum, comms[i], streams[i]);
+                ncclAllReduce(dData[i], dData[i], nPerGPU[i], ncclFloat, ncclSum, comms[i], streams[idGPUs[i]]);
             }
             fflush(stdout);
              
@@ -291,7 +291,7 @@ void simulateIterativeNCCL(appStruct_t *data){
             for (size_t i = 0; i < nGPUs; i++) {
 
                 cudaSetDevice(idGPUs[i]);
-                err = cudaStreamSynchronize(streams[i]);
+                err = cudaStreamSynchronize(streams[idGPUs[i]]);
 
                 if(err != cudaSuccess)
                     printf("Job: Allreduce failed:  %s\n", cudaGetErrorString(err));

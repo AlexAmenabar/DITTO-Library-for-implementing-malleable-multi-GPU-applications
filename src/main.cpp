@@ -166,7 +166,7 @@ int reconfs_workload(schInfo_t *schInfo){
     //const char conf_names = ["NPSYNC","PSYNC","PASYNC"];
 
     //size_t nRepetitions = 10;
-    size_t nRepetitions = 1;
+    size_t nRepetitions = 10;
     void* jargs[8];
 
 
@@ -306,7 +306,7 @@ int coalescending_reconfs_workload(schInfo_t *schInfo){
 
 
     //size_t nRepetitions = 10;
-    size_t nRepetitions = 1;
+    size_t nRepetitions = 10;
 
     // from 1KB to 20GB of flotas (4 bytes)
     //size_t N = (size_t)1024 * (size_t)1024 * (size_t)1024 / sizeof(float); // 1GB (sizeof(float)), 268.435.456
@@ -682,7 +682,7 @@ int reconfs_workload_GPU2GPU_expand(schInfo_t *schInfo){
     //size_t arrPartitions[3] = {64,128,256};
 
     // number of repetitions for each experiment
-    size_t nRepetitions = 1;
+    size_t nRepetitions = 10;
 
 
     // argv for the input of the application
@@ -830,7 +830,7 @@ int reconfs_workload_GPU2GPU_shrink(schInfo_t *schInfo){
     //size_t arrPartitions[3] = {64,128,256};
 
     // number of repetitions for each experiment
-    size_t nRepetitions = 1;
+    size_t nRepetitions = 10;
 
 
     // argv for the input of the application
@@ -2496,7 +2496,7 @@ int ncclCommunicationOverhead(schInfo_t *schInfo, size_t nGPUs){
     size_t K[nK] = {512, 1024, 2048, 4096, 8192};
 
 
-    size_t nRepetitions = 1;
+    size_t nRepetitions = 10;
 
     size_t nConfigurations = 7;
     jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
@@ -2653,7 +2653,7 @@ int unifiedMemoryTest(schInfo_t *schInfo, size_t nGPUs){
     N = (size_t)1024 * (size_t)512 / (size_t)4;    
     size_t T = 10;
     size_t K = 1;
-    size_t nRepetitions = 1;
+    size_t nRepetitions = 10;
 
 
     size_t nG = 5;
@@ -2903,6 +2903,7 @@ int main(int argc, char* argv[]){
     //reconfCPUEval(schInfo);
 
 #ifdef RECONFEXP
+    
     printf("\n\n\n[EXPAND]\n");
     fflush(stdout);
     reconfExpandEval(schInfo, schInfo->nGPUs);

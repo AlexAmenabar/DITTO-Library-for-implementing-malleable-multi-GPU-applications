@@ -49,7 +49,7 @@ void initDITTO(void *jobControl){
     }
 
     // TODO: This should me moved to a cuda dependant place, and initialized only when communications are asynchronous
-    appData->cudaStreams = (cudaStream_t*)malloc(8 * sizeof(cudaStream_t)); // 8 because we consider that it is the maximum number of GPUs we will use for now, in intra-node configurations
+    appData->cudaStreams = (cudaStream_t*)calloc(8, sizeof(cudaStream_t)); // 8 because we consider that it is the maximum number of GPUs we will use for now, in intra-node configurations
     initializeStreams(appData->state->jobResources);
 
     // initialize DTI data
@@ -286,6 +286,9 @@ void reconfigure(reconfDirEnum reconfDir){
     clock_gettime(CLOCK_MONOTONIC, &endConf);
     tConf += (endConf.tv_sec - startConf.tv_sec) + (endConf.tv_nsec - startConf.tv_nsec) / 1e9;
 
+    // initialize new streams too
+    initializeStreams(reconfJobResources);
+
     // perform data redistributions (DTM)
     if(reconfDir == GPU2GPU){
         clock_gettime(CLOCK_MONOTONIC, &startComm);
@@ -294,9 +297,38 @@ void reconfigure(reconfDirEnum reconfDir){
         tComm += (endComm.tv_sec - startComm.tv_sec) + (endComm.tv_nsec - startComm.tv_nsec) / 1e9;
     }
 
+
+    jobResources_t *diffJobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    diffJobResources->idGPUs = (size_t*)calloc(jobResources->nGPUs + reconfJobResources->nGPUs, sizeof(size_t));
+    diffJobResources->nGPUs = 0;
+
+    // find the GPUs in jobResources and not in reconfJobResources
+    for(size_t i = 0; i<jobResources->nGPUs; i++){
+
+        int found = 0;
+
+        for(size_t j = 0; j<reconfJobResources->nGPUs; j++){
+
+            if(jobResources->idGPUs[i] == reconfJobResources->idGPUs[j]) {
+
+                found = 1;
+            }
+
+            if(!found){
+
+                diffJobResources->idGPUs[diffJobResources->nGPUs] = jobResources->idGPUs[i];
+                diffJobResources->nGPUs ++;
+            }
+        }
+    }
+
     // destroy old streams and initialize new ones
-    destroyStreams(jobResources);
-    initializeStreams(reconfJobResources);
+    destroyStreams(diffJobResources);
+
+    // deallocate
+    free(diffJobResources->idGPUs);
+    free(diffJobResources);
+
 
     // update state
     updateState(state, jobControl);
