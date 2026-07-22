@@ -286,6 +286,7 @@ void reconfigure(reconfDirEnum reconfDir){
     clock_gettime(CLOCK_MONOTONIC, &endConf);
     tConf += (endConf.tv_sec - startConf.tv_sec) + (endConf.tv_nsec - startConf.tv_nsec) / 1e9;
 
+    
     // initialize new streams too
     initializeStreams(reconfJobResources);
 
@@ -313,12 +314,11 @@ void reconfigure(reconfDirEnum reconfDir){
 
                 found = 1;
             }
+        }
+        if(!found){
 
-            if(!found){
-
-                diffJobResources->idGPUs[diffJobResources->nGPUs] = jobResources->idGPUs[i];
-                diffJobResources->nGPUs ++;
-            }
+            diffJobResources->idGPUs[diffJobResources->nGPUs] = jobResources->idGPUs[i];
+            diffJobResources->nGPUs ++;
         }
     }
 

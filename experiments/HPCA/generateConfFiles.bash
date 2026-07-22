@@ -61,8 +61,8 @@ topoMatrix.txt \
 experiments/HPCA/WorkloadsOutputReduced/events_${jobName}.txt \
 experiments/HPCA/WorkloadsOutputReduced/monitor_${jobName}.txt \
 experiments/HPCA/WorkloadsOutputReduced/out_${jobName}.txt \
-5 \
-1800
+9 \
+1200
 EOF
 
             chmod +x "$sbatchFile"

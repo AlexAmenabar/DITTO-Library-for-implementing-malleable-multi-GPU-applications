@@ -132,7 +132,7 @@ void simulatePhases(appStruct_t *data){
                 //runCPU((float*)(getDTIByIndex(0)->cpuData), getDTIByIndex(0)->N, data->cpuK);
                 //sleep(data->cpuK);
 
-                size_t t = rand() % 1000;
+                size_t t = rand() % 500;
                 if(t == 0)
                     t = 1;
 
