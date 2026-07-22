@@ -2646,11 +2646,12 @@ int unifiedMemoryTest(schInfo_t *schInfo, size_t nGPUs){
     const size_t cores[1] =  {0};
 
 
-    size_t nN = 1;
-    size_t arrayN[nN] = {(size_t)1048576 * (size_t)1}; // 1GB
+    size_t nN = 3;
+    size_t arrayN[nN] = {(size_t)1024 * (size_t)8 / (size_t)4, (size_t)1024 * (size_t)64 / (size_t)4, (size_t)1024 * (size_t)512 / (size_t)4};
 
-    size_t N = (size_t)1048576 / 4;// * (size_t)1024 * (size_t)8;
-    N = (size_t)1024 * (size_t)512 / (size_t)4;    
+    //size_t N = (size_t)1048576 / 4;// * (size_t)1024 * (size_t)8;
+    //N = (size_t)1024 * (size_t)512 / (size_t)4;    
+    //N = (size_t)4096 / (size_t)4;
     size_t T = 10;
     size_t K = 1;
     size_t nRepetitions = 10;
@@ -2661,7 +2662,7 @@ int unifiedMemoryTest(schInfo_t *schInfo, size_t nGPUs){
     size_t arrayGOut[nG] = {0, 10, 20, 30, 40};
 
 
-    size_t nConfigurations = 7;
+    size_t nConfigurations = 6;
     jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
     
     jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
@@ -2706,83 +2707,75 @@ int unifiedMemoryTest(schInfo_t *schInfo, size_t nGPUs){
     jobResources[5]->idGPUs[2] = 4;
     jobResources[5]->idGPUs[3] = 6;
 
-    jobResources[6] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
-    jobResources[6]->nGPUs = 8;
-    jobResources[6]->idGPUs = (size_t*)calloc(8, sizeof(size_t));
-    jobResources[6]->idGPUs[0] = 0;
-    jobResources[6]->idGPUs[1] = 1;
-    jobResources[6]->idGPUs[2] = 2;
-    jobResources[6]->idGPUs[3] = 3;
-    jobResources[6]->idGPUs[4] = 4;
-    jobResources[6]->idGPUs[5] = 5;
-    jobResources[6]->idGPUs[6] = 6;
-    jobResources[6]->idGPUs[7] = 7;
 
     // argv for the input of the application
 
     for(size_t rec = 0; rec < nConfigurations; rec++){
         
-        for(size_t g = 0; g < nG; g++){
-        
-            for(size_t rep = 0; rep<nRepetitions; rep++){
-                                                
-                // weak scalability
-                size_t ja = N; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
-                size_t jT = T;
-                size_t jK = K;
+        for(size_t iN = 0; iN < nN; iN ++){
 
-                // communication method
-                size_t jPinned = pinned[0];
-                size_t jAsync = async[0];
-                size_t jSteps = steps[0];
-                size_t jCores = cores[0];
-                int jReconfDir = 1;
-                size_t jmall = 1;
-                
-                size_t pIn = arrayGIn[g];
-                size_t pOut = arrayGOut[g];
+            for(size_t g = 0; g < nG; g++){
+            
+                for(size_t rep = 0; rep<nRepetitions; rep++){
+                                                    
+                    // weak scalability
+                    size_t ja = arrayN[iN]; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                    size_t jT = T;
+                    size_t jK = K;
 
-                void* jargs[12];
+                    // communication method
+                    size_t jPinned = pinned[0];
+                    size_t jAsync = async[0];
+                    size_t jSteps = steps[0];
+                    size_t jCores = cores[0];
+                    int jReconfDir = 1;
+                    size_t jmall = 1;
+                    
+                    size_t pIn = arrayGIn[g];
+                    size_t pOut = arrayGOut[g];
 
-                jargs[0] = &ja;
-                jargs[1] = &jT;
-                jargs[2] = &jK;
-                jargs[3] = &jPinned;
-                jargs[4] = &jAsync; // async
-                jargs[5] = &jSteps;
-                jargs[6] = &jCores;
-                jargs[7] = &jReconfDir;
-                jargs[8] = &pIn;
-                jargs[9] = &pOut;
-                jargs[10] = &jmall;
+                    void* jargs[12];
 
-                // launch job
-                jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
-                jobLauncher->jobType = MALLEABLE;
-                jobLauncher->jobPriority = LOW;
-                jobLauncher->nReqGPUs = 8; // no matter
-                jobLauncher->nReqMinGPUs = 1;
-                jobLauncher->launchTimeStep = 1; // no matter
-                jobLauncher->appType = 2; // no matter
-                jobLauncher->argc = 10;
-                jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
-                jobLauncher->launchFunc = &launch_unified_memory_app;
+                    jargs[0] = &ja;
+                    jargs[1] = &jT;
+                    jargs[2] = &jK;
+                    jargs[3] = &jPinned;
+                    jargs[4] = &jAsync; // async
+                    jargs[5] = &jSteps;
+                    jargs[6] = &jCores;
+                    jargs[7] = &jReconfDir;
+                    jargs[8] = &pIn;
+                    jargs[9] = &pOut;
+                    jargs[10] = &jmall;
+
+                    // launch job
+                    jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+                    jobLauncher->jobType = MALLEABLE;
+                    jobLauncher->jobPriority = LOW;
+                    jobLauncher->nReqGPUs = 8; // no matter
+                    jobLauncher->nReqMinGPUs = 1;
+                    jobLauncher->launchTimeStep = 1; // no matter
+                    jobLauncher->appType = 2; // no matter
+                    jobLauncher->argc = 10;
+                    jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                    jobLauncher->launchFunc = &launch_unified_memory_app;
 
 
-                printf(" [%zu, %zu, %zu, %zu, %zu, %zu]: ", ja, jT, jK, pIn, pOut, rec);
-                addPendingJob(jobLauncher); // add to pending list
-                launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[rec]); // launch from pending list
-                
-                // wait until job finishes and finish job
-                while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+                    printf(" [%zu, %zu, %zu, %zu, %zu, %zu]: ", ja * 4, jT, jK, pIn, pOut, rec);
+                    addPendingJob(jobLauncher); // add to pending list
+                    launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[rec]); // launch from pending list
+                    
+                    // wait until job finishes and finish job
+                    while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
 
-                    sleep(1);
+                        sleep(1);
+                    }
+
+                    finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+                    removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                    
+                    fflush(stdout);
                 }
-
-                finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
-                removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
-                
-                fflush(stdout);
             }
         }
     }

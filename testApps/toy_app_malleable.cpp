@@ -785,6 +785,7 @@ void launch_unified_memory_app(int argc, void* argv[]){
 
     for(i = 0; i<getState()->jobResources->nGPUs; i++){
 
+        // manage the region owned by this GPU
         for(size_t j = i * N / nGPUs; j < (i+1) * (N / nGPUs); j++){
 
             for(size_t l = 0; l<N; l++){

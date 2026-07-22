@@ -45,15 +45,22 @@ __global__ void simulateGraphKernel(float* arr, size_t N, size_t *n, size_t *off
 
         for (size_t k = 0; k < K; k++) {
 
-            for(size_t i = 0; i<n[index]; i++){
+            size_t nVal = n[index];
+            size_t offVal = off[index];
+
+            for(size_t i = 0; i<nVal; i++){
         
-                size_t pos = off[i];
-                size_t nodeIndex = indices[pos];
+                // get node index from the array of indices
+                size_t nodeIndex = indices[offVal + i];
+
+                // get value of the node
                 v = arr[nodeIndex];
+
+                // accumulate the value
                 val += v;
             }
 
-            val = val * 0.125f;
+            val = val * 0.5f;
         }
 
         tmpAcc[index] = val;

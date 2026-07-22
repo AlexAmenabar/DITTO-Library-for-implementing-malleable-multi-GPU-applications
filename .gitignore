@@ -70,7 +70,9 @@ experiments/workloads/
 experiments/HPCA/plotScripts/
 experiments/HPCA/Results/
 experiments/HPCA/WorkloadsOutput/
+experiments/HPCA/WorkloadsOutputReduced/
 experiments/HPCA/WorkloadsSlurm/*.sbatch
+experiments/HPCA/WorkloadsSlurmReduced/*.sbatch
 /bin/
 /*.txt
 /*.sbatch

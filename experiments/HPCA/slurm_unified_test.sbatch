@@ -13,7 +13,7 @@
 
 # Advanced use
 #SBATCH --cpus-per-task=16
-#SBATCH --time=07-00:00:00 
+#SBATCH --time=01:00:00 
 
 # Required memory (Default 2GB)
 #SBATCH --mem-per-cpu=20GB
@@ -33,3 +33,4 @@ bnd run --gpu python3 topo2matrix.py topoRaw.txt topoMatrix.txt
 
 bnd exec --devel ./bin/unifiedTest 8 experiments/communicationsExperiments/workload.txt topoMatrix.txt commEventsNCCL.txt commUsageNCCL.txt commOutputNCCL.txt 
 #valgrind --leak-check=full
+#compute-sanitizer --tool memcheck

@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Arrays of parameters
-pFixed=(100 0 0 75 40)
-pMoldable=(0 100 0 25 40)
-pFlexible=(0 0 100 0 20)
+pFixed=(100 75 0)
+pMoldable=(0 0 0)
+pFlexible=(0 25 100)
 
-pIterative=(60 20 20 33)
-pPhases=(20 60 20 33)
-pComm=(20 20 60 33)
+pIterative=(33 20)
+pPhases=(33 10)
+pComm=(33 70)
 
 policy=(0 1)
 
@@ -32,16 +32,16 @@ for p in "${policy[@]}"; do
 
             jobName="${prefix}_J_${pFixed[$i]}_${pMoldable[$i]}_0_${pFlexible[$i]}_A_${pIterative[$j]}_${pPhases[$j]}_${pComm[$j]}"
 
-            workload="experiments/HPCA/Workloads/workload_J_${pFixed[$i]}_${pMoldable[$i]}_0_${pFlexible[$i]}_A_${pIterative[$j]}_${pPhases[$j]}_${pComm[$j]}.txt"
+            workload="experiments/HPCA/WorkloadsReduced/workload_J_${pFixed[$i]}_${pMoldable[$i]}_0_${pFlexible[$i]}_A_${pIterative[$j]}_${pPhases[$j]}_${pComm[$j]}.txt"
 
-            sbatchFile="experiments/HPCA/WorkloadsSlurm/${jobName}.sbatch"
+            sbatchFile="experiments/HPCA/WorkloadsSlurmReduced/${jobName}.sbatch"
 
             cat > "$sbatchFile" <<EOF
 #!/bin/bash
 
 #SBATCH --job-name=${jobName}
-#SBATCH --output=experiments/HPCA/WorkloadsOutput/${jobName}.out
-#SBATCH --error=experiments/HPCA/WorkloadsOutput/${jobName}.err
+#SBATCH --output=experiments/HPCA/WorkloadsOutputReduced/${jobName}.out
+#SBATCH --error=experiments/HPCA/WorkloadsOutputReduced/${jobName}.err
 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
@@ -58,9 +58,9 @@ bnd exec --devel ${executable} \
 8 \
 ${workload} \
 topoMatrix.txt \
-experiments/HPCA/WorkloadsOutput/events_${jobName}.txt \
-experiments/HPCA/WorkloadsOutput/monitor_${jobName}.txt \
-experiments/HPCA/WorkloadsOutput/out_${jobName}.txt \
+experiments/HPCA/WorkloadsOutputReduced/events_${jobName}.txt \
+experiments/HPCA/WorkloadsOutputReduced/monitor_${jobName}.txt \
+experiments/HPCA/WorkloadsOutputReduced/out_${jobName}.txt \
 5 \
 1800
 EOF
