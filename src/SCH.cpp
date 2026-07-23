@@ -46,17 +46,47 @@ void greedy(schInfo_t *schInfo){
 
         // [SCHEDULING POLICY] : launch, if possible, using all the GPUs the job wants
         // launch using the maximum number of GPUs possible
-        nLaunchGPUs = 0;
-        if(schInfo->nAvGPUs >= nReqGPUs){
-            nLaunchGPUs = nReqGPUs;
+        nLaunchGPUs = 0;    
+
+        // if the job is not the first in the pending queue, and the timeout has been surpassed
+        if(iJob > 0 && schInfo->timeoutCurrent >= schInfo->timeout){
+
+            // get the first job
+            job_t *firstJob = getJobFromQueue(pendingQueue, iJob);
+            
+            // get first job GPU requests
+            size_t firstJobReqGPUs = firstJob->jobLauncher->nReqGPUs;
+
+            // reserve GPUs for the first job
+            if((schInfo->nAvGPUs - firstJobReqGPUs) >= nReqGPUs){
+                nLaunchGPUs = nReqGPUs;
+            }
+            // if job is MOLDABLE or FLEXIBLE, enable there are [avGPUs >= minGPUs]
+            else if((schInfo->nAvGPUs - firstJobReqGPUs) >= nReqMinGPUs){
+                nLaunchGPUs = (schInfo->nAvGPUs - firstJobReqGPUs);
+            }
+
         }
-        // if job is MOLDABLE or FLEXIBLE, enable there are [avGPUs >= minGPUs]
-        else if(schInfo->nAvGPUs >= nReqMinGPUs){
-            nLaunchGPUs = schInfo->nAvGPUs;
+        // else, work as always
+        else{
+
+            if(schInfo->nAvGPUs >= nReqGPUs){
+                nLaunchGPUs = nReqGPUs;
+            }
+            // if job is MOLDABLE or FLEXIBLE, enable there are [avGPUs >= minGPUs]
+            else if(schInfo->nAvGPUs >= nReqMinGPUs){
+                nLaunchGPUs = schInfo->nAvGPUs;
+            }
         }
 
         // launch job if possible
         if(nLaunchGPUs){
+
+            // if the first job is launched, reinit the timeout
+            if(iJob == 0){
+
+                schInfo->timeoutCurrent = 0;
+            }
 
             // allocate resources for the job (refactorize?)
             jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
@@ -69,9 +99,6 @@ void greedy(schInfo_t *schInfo){
             // launch job
             launchJob(schInfo, job, iJob, jobResources);
 
-            // print information of the job
-            
-            
             pthread_mutex_lock(&printLock);
             printf(" -- [RMS] Launching job %zu (id %zu) with %zu GPUs (", iJob, job->jobId, nLaunchGPUs);
             for(size_t g = 0; g<job->jobControl->jobResources->nGPUs; g++)

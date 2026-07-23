@@ -225,7 +225,7 @@ int improveN2NTopology(schInfo_t *schInfo, jobResources_t *jobResources, jobReso
         for(size_t group = 0; group < schInfo->nGPUs / nGPUs; group++){
 
             avGroup = 1;
-            for(size_t gpu = group * schInfo->nGPUs / nGPUs; gpu < group * schInfo->nGPUs / nGPUs + schInfo->nGPUs / nGPUs; gpu++){
+            for(size_t gpu = group * nGPUs; gpu < (group+1) * nGPUs; gpu++){
 
                 if(!schInfo->avGPUs[gpu]){
                 
@@ -235,9 +235,9 @@ int improveN2NTopology(schInfo_t *schInfo, jobResources_t *jobResources, jobReso
 
             if(avGroup){
 
-                for(size_t i = 0; i < schInfo->nGPUs / nGPUs; i++){
+                for(size_t i = 0; i < nGPUs; i++){
                 
-                    reconfJobResources->idGPUs[i] = group * schInfo->nGPUs / nGPUs + i;
+                    reconfJobResources->idGPUs[i] = group * nGPUs + i;
                 }
 
                 return 1;
@@ -612,11 +612,11 @@ void topology(schInfo_t *schInfo){
                             if(found){
                                 
                                 scheduleReconfiguration(schInfo, job, iJob, topoJobResources);
+
+                                // job reconfigured
+                                schInfo->nKeeps ++;
+                                jobReconfigured = 1;
                             }
-                            schInfo->nKeeps ++;
-                            
-                            // job reconfigured
-                            jobReconfigured = 1;
                         }
 
 

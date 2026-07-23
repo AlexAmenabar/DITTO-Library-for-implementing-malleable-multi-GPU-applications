@@ -13,7 +13,7 @@
 
 # Advanced use
 #SBATCH --cpus-per-task=16
-#SBATCH --time=01:00:00 
+#SBATCH --time=07-00:00:00 
 
 # Required memory (Default 2GB)
 #SBATCH --mem-per-cpu=20GB

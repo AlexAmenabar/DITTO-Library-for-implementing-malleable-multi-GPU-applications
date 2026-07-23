@@ -228,6 +228,9 @@ struct schInfo_t {
     size_t nMonitored;
     size_t monitorIndex;
 
+    size_t timeout;
+    size_t timeoutCurrent;
+
 
     // accumulated monitored data
     //power consumption

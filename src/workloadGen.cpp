@@ -159,8 +159,8 @@ int main(int argc, char* argv[]){
     // set bounds for parameters (TEMPORAL, IMPROVE WHEN POSSIBLE)
     size_t minN[3] = {(size_t)1048576 * (size_t)256 / (size_t)4, (size_t)1048576 * (size_t)512 / (size_t)4, (size_t)1048576 * (size_t)1024 / (size_t)4}; // SMALL; MEDIAN; LARGE JOBS
     size_t maxN[3] = {(size_t)1048576 * (size_t)512 / (size_t)4, (size_t)1048576 * (size_t)1024 / (size_t)4, (size_t)1048576 * (size_t)2024 / (size_t)4}; // SMALL; MEDIAN; LARGE JOBS
-    size_t T[4] = {500, 1000, 2000, 3000}; // SMALL; MEDIAN; LARGE JOBS
-    size_t K[5] = {100, 150, 250, 500, 800}; // constant for all jobs types
+    size_t T[4] = {1500, 2000, 2500, 3500}; // SMALL; MEDIAN; LARGE JOBS
+    size_t K[5] = {100, 200, 400, 500, 600}; // constant for all jobs types
     size_t goodGPUs[4] = {1, 2, 4, 8}; // SMALL; MEDIAN; LARGE JOBS (a different request is 'bad', underutilization or overutilization)
     size_t cpuK[4] = {1, 2, 4, 6}; // constant for all jobs types
     size_t P[2] = {1, 2};

@@ -319,6 +319,9 @@ int main(int argc, char* argv[]){
     schInfo->rconf = &topology;
 #endif
 
+    schInfo->timeout = 60 * 10;
+    schInfo->timeoutCurrent = 0;
+
     // initialize lock
     pthread_mutex_init(&(schInfo->lockTimer), NULL);
     pthread_mutex_init(&(schInfo->invoqueSchedulerLock), NULL);
@@ -449,8 +452,11 @@ int main(int argc, char* argv[]){
         tmpTimer = timer;
         pthread_mutex_unlock(&(schInfo->lockTimer));
 
+        // update timeout counter only if the warm-up time finished
+        schInfo->timeoutCurrent ++;
+
         // batch finished
-        if(tmpTimer % tBatch == 0 && tmpTimer > 60 * 5){ // 5 minutes of warm-up
+        if(tmpTimer % tBatch == 0 && tmpTimer > 60 * 10){ // 10 minutes of warm-up
             
             storeBatchResultsInFile(schInfo, fOutput, batch, tBatch, iPrevJob);
             iPrevJob = getNumberOfJobsInQueue(&(schInfo->finishedJobs));
