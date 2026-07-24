@@ -24,7 +24,8 @@ void greedy(schInfo_t *schInfo){
     // get pending jobs queue information
     jobQueue_t *pendingQueue = &(schInfo->pendingJobs);
     size_t nPendingJobs = getNumberOfJobsInQueue(pendingQueue);
-    
+    nPendingJobs = 1; // only the first job can enter to the system
+
     // loop over pending jobs and check whether any job can be scheduled
     for(iJob = 0; iJob<nPendingJobs; iJob++){
 
@@ -49,23 +50,49 @@ void greedy(schInfo_t *schInfo){
         nLaunchGPUs = 0;    
 
         // if the job is not the first in the pending queue, and the timeout has been surpassed
-        if(iJob > 0 && schInfo->timeoutCurrent >= schInfo->timeout){
+        /*if(iJob > 0 && schInfo->timeoutCurrent >= schInfo->timeout){
 
-            // get the first job
-            job_t *firstJob = getJobFromQueue(pendingQueue, iJob);
-            
-            // get first job GPU requests
-            size_t firstJobReqGPUs = firstJob->jobLauncher->nReqGPUs;
+            // running jobs
+            jobQueue_t *runningQueue = &(schInfo->runningJobs);
+            size_t nRunningJobs = getNumberOfJobsInQueue(runningQueue);
 
-            // reserve GPUs for the first job
-            if((schInfo->nAvGPUs - firstJobReqGPUs) >= nReqGPUs){
-                nLaunchGPUs = nReqGPUs;
+            // GPUs required by pending job 0
+            job_t *job0 = getJobFromQueue(pendingQueue, 0);
+            size_t nReqGPUsJob0 = job0->jobLauncher->nReqGPUs;
+            size_t nReqMinGPUsJob0 = nReqGPUsJob0; // [FIXED or MALLEABLE]
+
+            // if job is MOLDABLE or FLEXIBLE, store the minimum number of GPUs too
+            if(job0->jobLauncher->jobType == MOLDABLE || job0->jobLauncher->jobType == FLEXIBLE){
+                nReqMinGPUsJob0 = job0->jobLauncher->nReqMinGPUs;
             }
-            // if job is MOLDABLE or FLEXIBLE, enable there are [avGPUs >= minGPUs]
-            else if((schInfo->nAvGPUs - firstJobReqGPUs) >= nReqMinGPUs){
-                nLaunchGPUs = (schInfo->nAvGPUs - firstJobReqGPUs);
-            }
 
+            // if job 0 is in timeout, then, launch a job only if the first job depends only on 1 job to execute and this will no longer starvate the first one
+            size_t irnJob = 0;
+            int found = 0;
+            while(irnJob < nRunningJobs && !found){
+
+                // get job from queue
+                job_t *rnJob = getJobFromQueue(runningQueue, irnJob);
+
+                // check if the job uses more GPUs or the same amount of GPUs that the first job requires
+                if(rnJob->jobControl->jobResources->nGPUs >= nReqGPUsJob0){
+
+                    // found
+                    found = 1;
+
+                    // compute the number of GPUs to launch the job
+                    size_t avGPUs = ;
+                    if(schInfo->nAvGPUs >= nReqGPUs){
+                        nLaunchGPUs = nReqGPUs;
+                    }
+                    // if job is MOLDABLE or FLEXIBLE, enable there are [avGPUs >= minGPUs]
+                    else if(schInfo->nAvGPUs >= nReqMinGPUs){
+                        nLaunchGPUs = schInfo->nAvGPUs;
+                    }
+                }
+
+                irnJob ++;
+            }
         }
         // else, work as always
         else{
@@ -77,7 +104,18 @@ void greedy(schInfo_t *schInfo){
             else if(schInfo->nAvGPUs >= nReqMinGPUs){
                 nLaunchGPUs = schInfo->nAvGPUs;
             }
+        }*/
+
+
+        // compute if job can be launched
+        if(schInfo->nAvGPUs >= nReqGPUs){
+            nLaunchGPUs = nReqGPUs;
         }
+        // if job is MOLDABLE or FLEXIBLE, enable there are [avGPUs >= minGPUs]
+        else if(schInfo->nAvGPUs >= nReqMinGPUs){
+            nLaunchGPUs = schInfo->nAvGPUs;
+        }
+        
 
         // launch job if possible
         if(nLaunchGPUs){

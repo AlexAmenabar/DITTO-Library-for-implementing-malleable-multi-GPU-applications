@@ -228,6 +228,7 @@ struct schInfo_t {
     size_t nMonitored;
     size_t monitorIndex;
 
+    // job 0 timeout management
     size_t timeout;
     size_t timeoutCurrent;
 
