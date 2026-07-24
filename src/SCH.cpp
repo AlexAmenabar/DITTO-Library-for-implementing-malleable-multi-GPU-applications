@@ -24,11 +24,14 @@ void greedy(schInfo_t *schInfo){
     // get pending jobs queue information
     jobQueue_t *pendingQueue = &(schInfo->pendingJobs);
     size_t nPendingJobs = getNumberOfJobsInQueue(pendingQueue);
-    nPendingJobs = 1; // only the first job can enter to the system
-
+    
     // loop over pending jobs and check whether any job can be scheduled
-    for(iJob = 0; iJob<nPendingJobs; iJob++){
+    iJob = 0;
+    int keep = 1;
+    while(nPendingJobs > 0 && keep){
 
+        keep = 0;
+        
         // get job from pending queue
         job = getJobFromQueue(pendingQueue, iJob);
         
@@ -146,8 +149,12 @@ void greedy(schInfo_t *schInfo){
             pthread_mutex_unlock(&printLock);
 
             // update number of pending jobs
-            nPendingJobs--;
-            iJob--;
+            nPendingJobs = getNumberOfJobsInQueue(pendingQueue);
+            keep = 1;
+
+            //if(nPendingJobs > 0) nPendingJobs = 1;
+            //if(iJob > 0)
+            //    iJob--;
         }
     }
 
