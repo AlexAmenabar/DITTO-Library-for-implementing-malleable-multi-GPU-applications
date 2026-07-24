@@ -553,8 +553,11 @@ int main(int argc, char* argv[]){
         if (sleepTime < 0.0)
             sleepTime = 0.0;
 
-        printf("Scheduler step = %.3f s, sleep = %.0f us\n", et, sleepTime);
-        fflush(stdout);
+        if(tmpTimer % 10 == 0){
+        
+            printf("Scheduler step = %.3f s, sleep = %.0f us\n", et, sleepTime);
+            fflush(stdout);
+        }
     }
 
     storeFinalResultsInFile(schInfo, fOutput, nBatches);
