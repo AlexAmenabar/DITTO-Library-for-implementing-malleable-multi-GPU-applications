@@ -456,7 +456,7 @@ int main(int argc, char* argv[]){
         schInfo->timeoutCurrent ++;
 
         // batch finished
-        if(tmpTimer % tBatch == 0 && tmpTimer > 60 * 10){ // 10 minutes of warm-up
+        if((tmpTimer) % tBatch == 0 && tmpTimer > 60 * 20){ // 10 minutes of warm-up
             
             storeBatchResultsInFile(schInfo, fOutput, batch, tBatch, iPrevJob);
             iPrevJob = getNumberOfJobsInQueue(&(schInfo->finishedJobs));
@@ -549,6 +549,12 @@ int main(int argc, char* argv[]){
         et = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 
         sleepTime = INTERVAL_US - (et * 1000000); // 1 second between calls
+
+        if (sleepTime < 0.0)
+            sleepTime = 0.0;
+
+        printf("Scheduler step = %.3f s, sleep = %.0f us\n", et, sleepTime);
+        fflush(stdout);
     }
 
     storeFinalResultsInFile(schInfo, fOutput, nBatches);
