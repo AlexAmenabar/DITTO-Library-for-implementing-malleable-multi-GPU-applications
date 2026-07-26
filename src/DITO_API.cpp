@@ -235,6 +235,15 @@ void reconfigure(reconfDirEnum reconfDir){
     reconfJobResources = state->reconfJobResources;
     reconfTypeEnum reconfEnum;
 
+    /*printf("Reconfiguring from: ");
+    for(size_t i=0;i<jobResources->nGPUs;i++)
+        printf("%zu ", jobResources->idGPUs[i]);
+    printf(" to: ");
+    for(size_t i=0;i<reconfJobResources->nGPUs;i++)
+        printf("%zu ", reconfJobResources->idGPUs[i]);
+    printf("\n");
+    fflush(stdout);*/
+    
     // set the reconfiguration type in case we perform a GPU2GPU reconfiguraiton 
     if(reconfDir == GPU2GPU)
     {

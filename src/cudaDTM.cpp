@@ -74,7 +74,11 @@ void initializeNCCLComm(jobResources_t *jobResources){
 
     appData->ncclComms = (ncclComm_t*)malloc(nGPUs * sizeof(ncclComm_t));
     
-    ncclCommInitAll(appData->ncclComms, nGPUs, devs.data());
+    ncclResult_t r = ncclCommInitAll(appData->ncclComms, nGPUs, devs.data());
+    if (r != ncclSuccess) {
+        fprintf(stderr, "NCCL init failed: %s\n", ncclGetErrorString(r));
+        abort();
+    }
 }
 
 void destroyNCCLComm(jobResources_t *jobResources){
@@ -310,6 +314,9 @@ void cpyDataCPU2GPUstep(DTI_t *DTI){
 
             else // commType.transmissionType == asyncComm && commType.transferSteps == oneStepComm
                 err = cudaMemcpy2D(dst, dpitch, src, spitch, w, h, cudaMemcpyHostToDevice);
+
+            if (err != cudaSuccess) 
+                printf("Job%zu: Memcpy2D CPU2GPU failed in %zu (%zu):  %s\n", jobControl->jobId, i, gpuIds[i], cudaGetErrorString(err));
         }
     }
 
@@ -572,6 +579,10 @@ void cpyDataGPU2CPUstep(DTI_t *DTI){
 
             else // commType.transmissionType == asyncComm && commType.transferSteps == oneStepComm
                 err = cudaMemcpy2D(dst, dpitch, src, spitch, w, h, cudaMemcpyDeviceToHost);
+
+
+            if (err != cudaSuccess) 
+                printf("Job%zu: Memcpy2D GPU2CPU failed in %zu (%zu):  %s\n", jobControl->jobId, i, gpuIds[i], cudaGetErrorString(err));
         }
 
 

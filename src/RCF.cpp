@@ -214,38 +214,94 @@ size_t computeTopologyScore(schInfo_t *schInfo, size_t nGPUs, size_t *idGPUs){
     return jobReconfigured;
 }*/
 
+
+// look for topology-aware reconfigurations
 int improveN2NTopology(schInfo_t *schInfo, jobResources_t *jobResources, jobResources_t *reconfJobResources){
 
     int avGroup;
     size_t nGPUs = jobResources->nGPUs;
+    
+    // helpers
+    size_t keptGPUs = 0;
+    int groupFound = 0;
 
-    // loop over groups
+
+    // consider only in the number of GPUs is 2 or 4
     if(nGPUs == 2 || nGPUs == 4){
 
-        for(size_t group = 0; group < schInfo->nGPUs / nGPUs; group++){
+        // set GPUs allocated currently by the job as free
+        for(size_t i = 0; i<jobResources->nGPUs; i++){
+            
+            // set available temporally
+            schInfo->avGPUs[jobResources->idGPUs[i]] = 1;
+        }
 
+
+        // compute the number of groups
+        size_t nGroups = schInfo->nGPUs / nGPUs;
+
+        // loop over groups
+        for(size_t group = 0; group < nGroups; group++){
+
+            // suppose a group is available
             avGroup = 1;
+
+            // loop over the group GPUs and check their availability
             for(size_t gpu = group * nGPUs; gpu < (group+1) * nGPUs; gpu++){
 
+                // if one GPU is not available, the group is not available
                 if(!schInfo->avGPUs[gpu]){
                 
                     avGroup = 0;
                 }
             }
 
+            // group is available
             if(avGroup){
 
-                for(size_t i = 0; i < nGPUs; i++){
-                
-                    reconfJobResources->idGPUs[i] = group * nGPUs + i;
+                // count how much GPUs this group shares with jobResources
+                size_t tmpKeptGPUs = 0;
+
+                // loop over the group
+                for(size_t gpu = group * nGPUs; gpu < (group+1) * nGPUs; gpu++){
+
+                    // loop over jobResources GPUs
+                    for(size_t srcGPU = 0; srcGPU < nGPUs; srcGPU++){
+
+                        // if equal, add one
+                        if(gpu == jobResources->idGPUs[srcGPU]){
+
+                            tmpKeptGPUs ++;
+                        }  
+                    }
                 }
 
-                return 1;
+                // if this group shares more GPUs with the original jobResources, then, set this as new configuration
+                if(tmpKeptGPUs > keptGPUs){
+
+                    // store the number of GPUs that is kept
+                    keptGPUs = tmpKeptGPUs;
+                 
+                    // store GPUs in reconfJobResources
+                    for(size_t i = 0; i < nGPUs; i++){
+                    
+                        reconfJobResources->idGPUs[i] = group * nGPUs + i;
+                    }
+
+                    groupFound = 1;
+                }
             }
+        }
+
+        // set GPUs in jobResources as allocated again
+        for(size_t i = 0; i<jobResources->nGPUs; i++){
+            
+            // set available temporally
+            schInfo->avGPUs[jobResources->idGPUs[i]] = 0;
         }
     }
 
-    return 0;
+    return groupFound;
 }
 
 
@@ -505,8 +561,17 @@ void topology(schInfo_t *schInfo){
 
                             int found = improveN2NTopology(schInfo, reconfJobResources, topoJobResources);
 
+                            /*printf("Shrink: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
+
+                            for(size_t i=0;i<topoJobResources->nGPUs;i++)
+                                printf("%zu ", topoJobResources->idGPUs[i]);
+                            printf("\n");
+                            fflush(stdout);*/
+
                             // schedule reconfiguration and allocate resources
                             if(!found){
+
+                                deallocateJobResourcesStruct(&(topoJobResources));
                                 scheduleReconfiguration(schInfo, job, iJob, reconfJobResources);
                             }
                             else{
@@ -525,7 +590,7 @@ void topology(schInfo_t *schInfo){
                             pthread_mutex_unlock(&(printLock));*/
                         }
                         // if the mean usage is more than 90 and there are 
-                        if(jobResources->nGPUs < schInfo->nGPUs && schInfo->nAvGPUs >= jobResources->nGPUs && meanUsage >= 90.0){
+                        else if(jobResources->nGPUs < schInfo->nGPUs && schInfo->nAvGPUs >= jobResources->nGPUs && meanUsage >= 90.0){
                             
                             // the previously allocated resources are maintained, but it is necessary to allocate the new ones
                             jobResources_t *reconfJobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t)); // final job resources
@@ -578,8 +643,17 @@ void topology(schInfo_t *schInfo){
 
                             int found = improveN2NTopology(schInfo, reconfJobResources, topoJobResources);
 
+                            /*printf("Expand: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
+
+                            for(size_t i=0;i<topoJobResources->nGPUs;i++)
+                                printf("%zu ", topoJobResources->idGPUs[i]);
+                            printf("\n");
+                            fflush(stdout);*/
+
                             // schedule reconfiguration and allocate resources
                             if(!found){
+
+                                deallocateJobResourcesStruct(&(topoJobResources));
                                 scheduleReconfiguration(schInfo, job, iJob, reconfJobResources);
                             }
                             else{
@@ -608,6 +682,13 @@ void topology(schInfo_t *schInfo){
 
                             int found = improveN2NTopology(schInfo, jobResources, topoJobResources);
 
+                            /*printf("Keep: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
+
+                            for(size_t i=0;i<topoJobResources->nGPUs;i++)
+                                printf("%zu ", topoJobResources->idGPUs[i]);
+                            printf("\n");
+                            fflush(stdout);*/
+
                             // schedule reconfiguration and allocate resources
                             if(found){
                                 
@@ -616,6 +697,10 @@ void topology(schInfo_t *schInfo){
                                 // job reconfigured
                                 schInfo->nKeeps ++;
                                 jobReconfigured = 1;
+                            }
+                            else{
+
+                                deallocateJobResourcesStruct(&(topoJobResources));
                             }
                         }
 

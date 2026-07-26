@@ -13,8 +13,8 @@ bnd run --devel nvcc \
     testApps/toy_app_malleable.cu \
     src/mainWorkload.cpp \
     -Xcompiler="-fopenmp -Wall -fsanitize=address -fno-omit-frame-pointer" \
-    -o bin/scheduler \
+    -o bin/schedulerTopo \
     -lpthread \
     -lnvidia-ml \
     -lnccl \
-    -DUTILIZATION
+    -DTOPO

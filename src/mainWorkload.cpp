@@ -467,6 +467,10 @@ int main(int argc, char* argv[]){
             // update batch
             batch++;
         }
+        // reinit monitor after warm-up finished
+        else if(tmpTimer == 60 * 20){
+            reinitMonitorAcc(schInfo);
+        }
 
 
         //pthread_mutex_lock(&(printLock));
