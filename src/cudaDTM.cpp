@@ -106,6 +106,31 @@ void resetGPUs(){
     }
 }
 
+void allocateMemoryGPU(float **ptr, size_t device, size_t size){
+
+    cudaError_t err;
+    cudaSetDevice(device);
+    
+    err = cudaMalloc(ptr, size * sizeof(float)); 
+
+    if(err != cudaSuccess){
+        printf("Failed allocating memory: %s\n", cudaGetErrorString(err));
+        fflush(stdout);
+    }
+}
+
+void deallocateMemoryGPU(float *ptr, size_t device){
+
+    cudaError_t err;
+    cudaSetDevice(device);
+
+    err = cudaFree(ptr); 
+
+    if(err != cudaSuccess){
+        printf("Failed allocating memory: %s\n", cudaGetErrorString(err));
+        fflush(stdout);
+    }
+}
 
 void cpyDataCPU2GPUtwoSteps(DTI_t *DTI){
 

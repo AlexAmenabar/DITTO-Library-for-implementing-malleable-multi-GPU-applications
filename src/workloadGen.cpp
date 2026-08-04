@@ -157,15 +157,20 @@ int main(int argc, char* argv[]){
     printf( " -- Number of each type apps: %d, %d, %d\n", nIterativeJobs, nPhasesJobs, nCommunicationJobs);
 
     // set bounds for parameters (TEMPORAL, IMPROVE WHEN POSSIBLE)
-    size_t minN[3] = {(size_t)1048576 * (size_t)256 / (size_t)4, (size_t)1048576 * (size_t)512 / (size_t)4, (size_t)1048576 * (size_t)1024 / (size_t)4}; // SMALL; MEDIAN; LARGE JOBS
-    size_t maxN[3] = {(size_t)1048576 * (size_t)512 / (size_t)4, (size_t)1048576 * (size_t)1024 / (size_t)4, (size_t)1048576 * (size_t)2024 / (size_t)4}; // SMALL; MEDIAN; LARGE JOBS
-    size_t T[4] = {1500, 2000, 2500, 3500}; // SMALL; MEDIAN; LARGE JOBS
-    size_t K[5] = {100, 200, 400, 500, 600}; // constant for all jobs types
+    size_t arrN[5] = {(size_t)1048576 * (size_t)16 / (size_t)4, (size_t)1048576 * (size_t)64 / (size_t)4,
+                     (size_t)1048576 * (size_t)256 / (size_t)4, (size_t)1048576 * (size_t)512 / (size_t)4, 
+                     (size_t)1048576 * (size_t)1024 / (size_t)4}
+
+        
+    size_t T[3] = {20000, 40000, 80000}; // SMALL; MEDIAN; LARGE JOBS
+    size_t K[4] = {50, 100, 200, 400}; // constant for all jobs types
+    
+    
     size_t goodGPUs[4] = {1, 2, 4, 8}; // SMALL; MEDIAN; LARGE JOBS (a different request is 'bad', underutilization or overutilization)
     size_t cpuK[4] = {1, 2, 4, 6}; // constant for all jobs types
     size_t P[2] = {1, 2};
 
-    size_t kT[4] = {50, 100, 250, 500};
+    size_t probGPUs[4] = {65, 85, 95, 100};
 
     //size_t minN[3] = {80, 160, 320}; // SMALL; MEDIAN; LARGE JOBS
     //size_t maxN[3] = {160, 320, 640}; // SMALL; MEDIAN; LARGE JOBS
@@ -224,35 +229,59 @@ int main(int argc, char* argv[]){
         size_t priority = 1;
 
         // job size (this affects GPU usage)
-        int jobSize = rand() % 3; // 0: small; 1: medium; 2: large
+        int jobSize = rand() % 5; // 0: small; 1: medium; 2: large
 
         // global job duration
-        int jobDuration = rand() % 4;
-        
-        if(jobSize == 2 && jobDuration == 3)
-            jobDuration = 2;
+        int jobDuration = rand() % 3;
         
         // kernel execution duration
-        int kernelDuration = rand() % 5;
-        if(jobSize == 2 && kernelDuration == 4)
-            kernelDuration = 3;
+        int kernelDuration = rand() % 4;
 
+        // update to avoid extremely large jobs
+        if(jobSize == 4 && kernelDuration == 3 && jobDuration == 2)
+            jobDuration = 1;
 
-        // resources (number of requested GPUs and minimum requested GPUs)
-        size_t iGPURequest = rand() % 4;
-        gpuRequest = goodGPUs[iGPURequest];
-
-        iGPURequest = rand() % 4;
-        mingpuRequest = goodGPUs[iGPURequest];
-
-        if(mingpuRequest > gpuRequest && gpuRequest > 1)
-            mingpuRequest = gpuRequest / 2;
-        else if(mingpuRequest > gpuRequest && gpuRequest == 1)
-            mingpuRequest = 1;
-        
             
-        if(gpuRequest > nGPUs) gpuRequest = nGPUs;
-        if(mingpuRequest > nGPUs) mingpuRequest = nGPUs;
+        // resources (number of requested GPUs and minimum requested GPUs)
+
+        size_t probValue = rand() % 100;
+    
+        if(probValue <= probGPUs[0]){
+
+            gpuReq = 1;
+            mingpuRequest = 1;
+        }
+        else if(probValue > probGPUs[0] && probValue <= probGPUs[1]){
+
+            gpuReq = 2;
+            minGPURequest = 1;
+        }
+        else if(probValue > probGPUs[1] && probValue <= probGPUs[2]){
+
+            gpuReq = 4;
+
+            size_t val = rand() % 100;
+            if(val <= 50){
+                mingpuRequest = 2;
+            }
+            else{
+                minGPURequest = 1;
+            }
+        }
+        else{
+
+            gpuReq = 8;
+
+            size_t val = rand() % 100;
+            if(val <= 33){
+                mingpuRequest = 4;
+            }
+            else if(val<=66){
+                minGPURequest = 2;
+            }
+            else 
+                minGPURequest = 1;
+        }
 
         // arrival time step
         arrival = computeJobArrival(arrival, tDiffMin, tDiffMax);
@@ -274,7 +303,7 @@ int main(int argc, char* argv[]){
 
 
         // compute exact job size (N)
-        size_t N = computeJobSize(minN[jobSize], maxN[jobSize]);
+        size_t N = arrN[jobSize];
         //N = 80;
 
         size_t vT = T[jobDuration];

@@ -555,6 +555,14 @@ DTI_t* getDTIByIndex(int i){
     return NULL;
 }
 
+void deallocateDTIs(){
+
+    for(size_t i = 0; i<nDTI; i++){
+
+        DTI_t *DTI = getDTIByIndex(i);
+        free(DTI->cpuData); 
+    }
+}
 
 DTIDesctiption_t* initializeDTIDescription(transmissionPatternsEnum tpttEnum, remainingElementsEnum rmEnum, communicationType_t commType){
 

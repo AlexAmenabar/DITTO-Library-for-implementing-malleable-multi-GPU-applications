@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Directory containing the sbatch files
-SBATCH_DIR="experiments/HPCA/WorkloadsSlurmReduced"
+SBATCH_DIR="experiments/HPCA/WorkloadsSlurm"
 
 # Check that the directory exists
 if [ ! -d "$SBATCH_DIR" ]; then

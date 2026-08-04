@@ -168,7 +168,7 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
         jobLauncher->argv[jobLauncher->argc] = (void*)jmall;
 
         // load application main function call pointer
-        if(jobLauncher->appType == 0){
+        /*if(jobLauncher->appType == 0){
 
             jobLauncher->launchFunc = &launch_iterative_app;
         }
@@ -178,6 +178,17 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
         }
         else if(jobLauncher->appType == 2){
             jobLauncher->launchFunc = &launch_NCCL_communications_app;
+        }*/
+        if(jobLauncher->appType == 0){
+
+            jobLauncher->launchFunc = &launch_jacobi_stencil;
+        }
+        else if(jobLauncher->appType == 1){
+
+            jobLauncher->launchFunc = &launch_n_body;
+        }
+        else if(jobLauncher->appType == 2){
+            jobLauncher->launchFunc = &launch_FFT;
         }
 
         pthread_mutex_lock(&(printLock));

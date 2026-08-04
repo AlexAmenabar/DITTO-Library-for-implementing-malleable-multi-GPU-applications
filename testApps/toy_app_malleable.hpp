@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 
+
 typedef struct appStruct_t {
 
     // iterative application
@@ -31,6 +32,31 @@ typedef struct appStruct_t {
     double communicationTimeSrcDst = 0.0;
     double communicationTimeDstSrc = 0.0;
 
+
+    // jacobi
+    float *dA;
+    float **upperHalo;
+    float **lowerHalo;
+    size_t nRows;
+    size_t nCols;
+
+    // MLP
+    float *w;
+    int n_samples;
+    int n_batches;
+    float *b;
+
+    // n-body
+    float *x, *y, *z; // position
+    float *vx, *vy, *vz; // velocity
+    float *m; // mass
+    float *fx, *fy, *fz;
+    float *ax, *ay, *az;
+
+    // FFT
+    float *real;
+    float *imag;
+
     // whether the application is malleable or not (this decides if there are reconfigurations or not)
     size_t malleable; // 0 / 1
 
@@ -43,6 +69,7 @@ void runCPU(float *arr, size_t N, size_t K);
 void runKernel(float* arr, size_t N, size_t K, size_t nGPUs);
 void runGraphKernel(float* arr, size_t N, size_t *n, size_t *off, float *tmpAcc, size_t *indices, size_t K, size_t gpu);
 void runUpdateNodesKernel(float* arr, size_t N, size_t *n, float *tmpAcc, size_t gpu);
+void runKernelComm(float* arr, size_t N, size_t K, size_t nGPUs);
 
 
 void launch_iterative_app(int argc, void* argv[]);
@@ -56,5 +83,14 @@ void launch_malloc_test_app(int argc, void* argv[]);
 void launch_reconfs_test_app_new(int argc, void* argv[]);
 void launch_NCCL_communications_app(int argc, void* argv[]);
 void launch_unified_memory_app(int argc, void* argv[]);
+
+
+// benchmarking
+void launch_communication_bench(int argc, void *argv[]);
+
+// real applications
+void launch_jacobi_stencil(int argc, void* argv[]);
+void launch_n_body(int argc, void* argv[]);
+void launch_FFT(int argc, void* argv[]);
 
 // test communication application

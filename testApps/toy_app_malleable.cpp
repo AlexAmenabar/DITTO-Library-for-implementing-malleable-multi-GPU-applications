@@ -18,6 +18,7 @@
 #include "RMS.hpp"
 
 
+
 void printArr(appStruct_t *appData){
 
     size_t i;
@@ -240,7 +241,7 @@ void simulateIterativeNCCL(appStruct_t *data){
             cudaSetDevice(idGPUs[i]);
 
             // run kernel
-            runKernel((float*)(getDTIByIndex(0)->gpuData[i]), getDTIByIndex(0)->nPerGPU[i], data->K, nGPUs);     
+            runKernelComm((float*)(getDTIByIndex(0)->gpuData[i]), getDTIByIndex(0)->nPerGPU[i], data->K, nGPUs);     
 
             // sync devices
             cudaDeviceSynchronize();
@@ -897,8 +898,14 @@ void launch_unified_memory_app(int argc, void* argv[]){
     pthread_exit(NULL);
 }
 
-// [SPECIFIC APPLICATIONS FOR EVALUATING MORE CONCRETE THINGS]
 
+
+// REAL APPLICATIONS
+
+
+
+
+// [SPECIFIC APPLICATIONS FOR EVALUATING MORE CONCRETE THINGS]
 void launch_reconfs_test_app_new(int argc, void* argv[]){
 
 

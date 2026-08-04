@@ -54,6 +54,9 @@ void storeBatchResultsInFile(schInfo_t *schInfo, FILE *fOutput, size_t batch, si
     size_t nGPUs = schInfo->nGPUs;
     job_t *job;
 
+    size_t meanDiv = 5;
+    size_t tBatchUpt = tBatch / meanDiv;
+
     //pthread_mutex_lock(&(printLock));
     fprintf(fOutput, "BATCH=%zu\n", batch);
 
@@ -61,57 +64,57 @@ void storeBatchResultsInFile(schInfo_t *schInfo, FILE *fOutput, size_t batch, si
     
     fprintf(fOutput, " - Throughput = %zu\n", batchFinishedJobs);
     schInfo->finalThroughput[batch] = (double)batchFinishedJobs;
-    fprintf(fOutput, " - Utilization = %lf\n", (double)schInfo->totalUtilization / ((double)schInfo->nGPUs * (double)tBatch));
-    schInfo->finalUtilization[batch] = (double)schInfo->totalUtilization / ((double)schInfo->nGPUs * (double)tBatch);
+    fprintf(fOutput, " - Utilization = %lf\n", (double)schInfo->totalUtilization / ((double)schInfo->nGPUs * (double)tBatchUpt));
+    schInfo->finalUtilization[batch] = (double)schInfo->totalUtilization / ((double)schInfo->nGPUs * (double)tBatchUpt);
     fprintf(fOutput, " - Utilization per GPU = [");
     for(i = 0; i < schInfo->nGPUs-1; i++){
 
-        fprintf(fOutput, "%lf ", (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatch));
-        schInfo->finalUtilizationPerGPU[i][batch] = (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatch);
+        fprintf(fOutput, "%lf ", (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatchUpt));
+        schInfo->finalUtilizationPerGPU[i][batch] = (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatchUpt);
 
     }
-    fprintf(fOutput, "%lf]\n", (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatch));
-    schInfo->finalUtilizationPerGPU[i][batch] = (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatch);
+    fprintf(fOutput, "%lf]\n", (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatchUpt));
+    schInfo->finalUtilizationPerGPU[i][batch] = (double)schInfo->totalUtilizationPerGPU[i] / ((double)tBatchUpt);
 
 
     // allocation time
-    fprintf(fOutput, " - Allocation area = %lf\n", (double)schInfo->totalAllocationArea / ((double)nGPUs * (double)tBatch));
-    schInfo->finalAllocationArea[batch] = (double)schInfo->totalAllocationArea / ((double)nGPUs * (double)tBatch);
+    fprintf(fOutput, " - Allocation area = %lf\n", (double)schInfo->totalAllocationArea / ((double)nGPUs * (double)tBatchUpt));
+    schInfo->finalAllocationArea[batch] = (double)schInfo->totalAllocationArea / ((double)nGPUs * (double)tBatchUpt);
     fprintf(fOutput, " - Allocation time per GPU = [");    
     for(i = 0; i < schInfo->nGPUs-1; i++){
 
-        fprintf(fOutput, "%lf ", (double)schInfo->allocationTimePerGPU[i] / ((double)tBatch));
-        schInfo->finalAllocationTimePerGPU[i][batch] = (double)schInfo->allocationTimePerGPU[i] / ((double)tBatch);
+        fprintf(fOutput, "%lf ", (double)schInfo->allocationTimePerGPU[i] / ((double)tBatchUpt));
+        schInfo->finalAllocationTimePerGPU[i][batch] = (double)schInfo->allocationTimePerGPU[i] / ((double)tBatchUpt);
 
     }
-    fprintf(fOutput, "%lf]\n", (double)schInfo->allocationTimePerGPU[i] / ((double)tBatch));
-    schInfo->finalAllocationTimePerGPU[i][batch] = (double)schInfo->allocationTimePerGPU[i] / ((double)tBatch);
+    fprintf(fOutput, "%lf]\n", (double)schInfo->allocationTimePerGPU[i] / ((double)tBatchUpt));
+    schInfo->finalAllocationTimePerGPU[i][batch] = (double)schInfo->allocationTimePerGPU[i] / ((double)tBatchUpt);
 
 
     // bandwidth time
-    fprintf(fOutput, " - PCIe throug. = %lf\n", (double)(schInfo->totalThroughputPCIe) / ((double)nGPUs * (double)tBatch));
-    schInfo->finalThroughputPCIe[batch] = (double)(schInfo->totalThroughputPCIe) / ((double)nGPUs * (double)tBatch);
+    fprintf(fOutput, " - PCIe throug. = %lf\n", (double)(schInfo->totalThroughputPCIe) / ((double)nGPUs * (double)tBatchUpt));
+    schInfo->finalThroughputPCIe[batch] = (double)(schInfo->totalThroughputPCIe) / ((double)nGPUs * (double)tBatchUpt);
     fprintf(fOutput, " - PCIe throug. per GPU = [");    
     for(i = 0; i < schInfo->nGPUs-1; i++){
 
-        fprintf(fOutput, "%lf ", (double)(schInfo->totalThroughputPCIePerGPU[i]) / (double)tBatch);
-        schInfo->finalThroughputPCIePerGPU[i][batch] = (double)(schInfo->totalThroughputPCIePerGPU[i]) / ((double)tBatch);
+        fprintf(fOutput, "%lf ", (double)(schInfo->totalThroughputPCIePerGPU[i]) / (double)tBatchUpt);
+        schInfo->finalThroughputPCIePerGPU[i][batch] = (double)(schInfo->totalThroughputPCIePerGPU[i]) / ((double)tBatchUpt);
 
     }
-    fprintf(fOutput, "%lf]\n", (double)(schInfo->totalThroughputPCIePerGPU[i]) / ((double)tBatch));
-    schInfo->finalThroughputPCIePerGPU[i][batch] = (double)(schInfo->totalThroughputPCIePerGPU[i]) / ((double)tBatch);
+    fprintf(fOutput, "%lf]\n", (double)(schInfo->totalThroughputPCIePerGPU[i]) / ((double)tBatchUpt));
+    schInfo->finalThroughputPCIePerGPU[i][batch] = (double)(schInfo->totalThroughputPCIePerGPU[i]) / ((double)tBatchUpt);
 
     
-    fprintf(fOutput, " - NVLink band. = %lf\n", (double)(schInfo->totalThroughputNVLink) / ((double)nGPUs * (double)tBatch));
-    schInfo->finalThroughputNVLink[batch] = (double)(schInfo->totalThroughputNVLink) / ((double)nGPUs * (double)tBatch);
+    fprintf(fOutput, " - NVLink band. = %lf\n", (double)(schInfo->totalThroughputNVLink) / ((double)nGPUs * (double)tBatchUpt));
+    schInfo->finalThroughputNVLink[batch] = (double)(schInfo->totalThroughputNVLink) / ((double)nGPUs * (double)tBatchUpt);
     fprintf(fOutput, " - NVLink band. per GPU = [");
     for(i = 0; i < schInfo->nGPUs-1; i++){
 
-        fprintf(fOutput, "%lf ", (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatch));
-        schInfo->finalThroughputNVLinkPerGPU[i][batch] = (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatch);
+        fprintf(fOutput, "%lf ", (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatchUpt));
+        schInfo->finalThroughputNVLinkPerGPU[i][batch] = (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatchUpt);
     }
-    fprintf(fOutput, "%lf]\n", (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatch));
-    schInfo->finalThroughputNVLinkPerGPU[i][batch] = (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatch);
+    fprintf(fOutput, "%lf]\n", (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatchUpt));
+    schInfo->finalThroughputNVLinkPerGPU[i][batch] = (double)(schInfo->totalThroughputNVLinkPerGPU[i]) / ((double)tBatchUpt);
 
 
     // Jobs information
@@ -317,6 +320,12 @@ int main(int argc, char* argv[]){
 #elif TOPO
     schInfo->sched = &greedy;
     schInfo->rconf = &topology;
+#elif EXPAND
+    schInfo->sched = &greedyMin;
+    schInfo->rconf = &expand;
+#elif EXPANDTOPO
+    schInfo->sched = &greedyMin;
+    schInfo->rconf = &expand_topology;
 #endif
 
     schInfo->timeout = 60 * 10;
@@ -441,6 +450,7 @@ int main(int argc, char* argv[]){
     
     batch = 0;
     size_t iPrevJob = 0;
+    size_t timeStep = 5;
 
     while(batch < nBatches){
 
@@ -448,12 +458,9 @@ int main(int argc, char* argv[]){
         usleep(sleepTime);
         int tmpTimer;
         pthread_mutex_lock(&(schInfo->lockTimer));
-        timer ++;    
+        timer += timeStep;    
         tmpTimer = timer;
         pthread_mutex_unlock(&(schInfo->lockTimer));
-
-        // update timeout counter only if the warm-up time finished
-        schInfo->timeoutCurrent ++;
 
         // batch finished
         if((tmpTimer) % tBatch == 0 && tmpTimer > 60 * 20){ // 10 minutes of warm-up
@@ -552,7 +559,8 @@ int main(int argc, char* argv[]){
         clock_gettime(CLOCK_MONOTONIC, &end);
         et = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 
-        sleepTime = INTERVAL_US - (et * 1000000); // 1 second between calls
+        // sleep
+        sleepTime = (INTERVAL_US * timeStep) - (et * 1000000); // 5 second between calls
 
         if (sleepTime < 0.0)
             sleepTime = 0.0;

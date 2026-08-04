@@ -272,6 +272,8 @@ void addDTI(DTI_t *DTI);
 void configureDTIs(jobResources_t *jobResources, jobResources_t *reconfJobResources, reconfDirEnum reconfDir);
 DTI_t* getDTI(const char *dtiName);
 DTI_t* getDTIByIndex(int i);
+void deallocateDTIs();
+
 
 void printDTI(DTI_t *DTI);
 

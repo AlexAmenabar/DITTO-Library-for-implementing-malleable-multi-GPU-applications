@@ -24,6 +24,10 @@ void destroyNCCLComm(jobResources_t *jobResources);
 /// @brief TODO
 void resetGPUs();
 
+
+void allocateMemoryGPU(float **ptr, size_t device, size_t size);
+void deallocateMemoryGPU(float *ptr, size_t device);
+
 // Host-GPU communcations
 void cpyDataCPU2GPU(DTI_t *DTI);
 void cpyDataGPU2CPU(DTI_t *DTI);

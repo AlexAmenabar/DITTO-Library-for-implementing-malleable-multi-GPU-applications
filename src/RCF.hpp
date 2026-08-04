@@ -7,6 +7,9 @@ typedef struct schInfo_t schInfo_t;
 void utilization(schInfo_t *schInfo);
 void topology(schInfo_t *schInfo);
 
+void expand(schInfo_t *schInfo);
+void expand_topology(schInfo_t *schInfo);
+
 // interface
 void reconf(schInfo_t *schInfo);
 

@@ -161,6 +161,93 @@ void greedy(schInfo_t *schInfo){
 }
 
 
+// Scheduling policy: launch any possible job
+// Allocation policy: select first available GPUs 
+void greedyMin(schInfo_t *schInfo){
+
+    // helper variables
+    job_t *job;
+    jobLauncher_t *jobLauncher;
+    jobResources_t *jobResources;
+    size_t jobType, nReqGPUs, nReqMinGPUs, iJob, nLaunchGPUs;
+
+    // get pending jobs queue information
+    jobQueue_t *pendingQueue = &(schInfo->pendingJobs);
+    size_t nPendingJobs = getNumberOfJobsInQueue(pendingQueue);
+    
+    // loop over pending jobs and check whether any job can be scheduled
+    iJob = 0;
+    int keep = 1;
+    while(nPendingJobs > 0 && keep){
+
+        keep = 0;
+        
+        // get job from pending queue
+        job = getJobFromQueue(pendingQueue, iJob);
+        
+        // get job structures
+        jobLauncher = job->jobLauncher;
+        jobType = jobLauncher->jobType;
+
+        // get required number of GPUs
+        nReqGPUs = jobLauncher->nReqGPUs;
+        nReqMinGPUs = nReqGPUs; // [FIXED or MALLEABLE]
+
+        // if job is MOLDABLE or FLEXIBLE, store the minimum number of GPUs too
+        if(jobType == MOLDABLE || jobType == FLEXIBLE){
+            nReqMinGPUs = jobLauncher->nReqMinGPUs;
+        }
+
+        // [SCHEDULING POLICY] : launch, if possible, using all the GPUs the job wants
+        // launch using the maximum number of GPUs possible
+        nLaunchGPUs = 0;    
+
+        // launch using the minimum number of resources
+        if(schInfo->nAvGPUs >= nReqMinGPUs){
+            nLaunchGPUs = nReqMinGPUs;
+        }
+        
+
+        // launch job if possible
+        if(nLaunchGPUs){
+
+            // if the first job is launched, reinit the timeout
+            if(iJob == 0){
+
+                schInfo->timeoutCurrent = 0;
+            }
+
+            // allocate resources for the job (refactorize?)
+            jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+            jobResources->nGPUs = nLaunchGPUs;
+            jobResources->idGPUs = (size_t*)malloc(nLaunchGPUs * sizeof(size_t));
+            
+            // select the GPUs for the job
+            selectFirstAvailableGPUs(jobResources->idGPUs, nLaunchGPUs, schInfo);
+
+            // launch job
+            launchJob(schInfo, job, iJob, jobResources);
+
+            pthread_mutex_lock(&printLock);
+            printf(" -- [RMS] Launching job %zu (id %zu) with %zu GPUs (", iJob, job->jobId, nLaunchGPUs);
+            for(size_t g = 0; g<job->jobControl->jobResources->nGPUs; g++)
+                printf(" %zu", job->jobControl->jobResources->idGPUs[g]);
+            printf(")\n");
+            fflush(stdout);
+            pthread_mutex_unlock(&printLock);
+
+            // update number of pending jobs
+            nPendingJobs = getNumberOfJobsInQueue(pendingQueue);
+            keep = 1;
+
+            //if(nPendingJobs > 0) nPendingJobs = 1;
+            //if(iJob > 0)
+            //    iJob--;
+        }
+    }
+
+}
+
 void sched(schInfo_t *schInfo){
 
     // call the scheduling algorithm set for the workload simulation

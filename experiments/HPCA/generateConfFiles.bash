@@ -5,11 +5,11 @@ pFixed=(100 75 0)
 pMoldable=(0 0 0)
 pFlexible=(0 25 100)
 
-pIterative=(33 20)
-pPhases=(33 10)
-pComm=(33 70)
+pIterative=(33 0)
+pPhases=(33 0)
+pComm=(33 100)
 
-policy=(0 1)
+policy=(0 1 2 3)
 
 # Array to store filenames
 filenames=()
@@ -22,26 +22,32 @@ for p in "${policy[@]}"; do
     if [[ $p -eq 0 ]]; then
         prefix="UT"
         executable="./bin/scheduler"
-    else
+    elif [[ $p -eq 1 ]]; then
         prefix="TP"
         executable="./bin/schedulerTopo"
+    elif [[ $p -eq 2 ]]; then
+        prefix="EP"
+        executable="./bin/schedulerExpand"
+    elif [[ $p -eq 3 ]]; then
+        prefix="ET"
+        executable="./bin/schedulerExpandTopo"
     fi
 
     for ((i=0; i<${#pFixed[@]}; i++)); do
         for ((j=0; j<${#pIterative[@]}; j++)); do
 
-            jobName="${prefix}_J_${pFixed[$i]}_${pMoldable[$i]}_0_${pFlexible[$i]}_A_${pIterative[$j]}_${pPhases[$j]}_${pComm[$j]}"
+            jobName="${prefix}_J_${pFixed[$i]}_${pFlexible[$i]}_A_${pIterative[$j]}_${pPhases[$j]}_${pComm[$j]}"
 
-            workload="experiments/HPCA/WorkloadsReduced/workload_J_${pFixed[$i]}_${pMoldable[$i]}_0_${pFlexible[$i]}_A_${pIterative[$j]}_${pPhases[$j]}_${pComm[$j]}.txt"
+            workload="experiments/HPCA/Workloads/workload_J_${pFixed[$i]}_${pFlexible[$i]}_A_${pIterative[$j]}_${pPhases[$j]}_${pComm[$j]}.txt"
 
-            sbatchFile="experiments/HPCA/WorkloadsSlurmReduced/${jobName}.sbatch"
+            sbatchFile="experiments/HPCA/WorkloadsSlurm/${jobName}.sbatch"
 
             cat > "$sbatchFile" <<EOF
 #!/bin/bash
 
 #SBATCH --job-name=${jobName}
-#SBATCH --output=experiments/HPCA/WorkloadsOutputReduced/${jobName}.out
-#SBATCH --error=experiments/HPCA/WorkloadsOutputReduced/${jobName}.err
+#SBATCH --output=experiments/HPCA/WorkloadsOutput/${jobName}.out
+#SBATCH --error=experiments/HPCA/WorkloadsOutput/${jobName}.err
 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
@@ -58,11 +64,11 @@ bnd exec --devel ${executable} \
 8 \
 ${workload} \
 topoMatrix.txt \
-experiments/HPCA/WorkloadsOutputReduced/events_${jobName}.txt \
-experiments/HPCA/WorkloadsOutputReduced/monitor_${jobName}.txt \
-experiments/HPCA/WorkloadsOutputReduced/out_${jobName}.txt \
-9 \
-1200
+experiments/HPCA/WorkloadsOutput/events_${jobName}.txt \
+experiments/HPCA/WorkloadsOutput/monitor_${jobName}.txt \
+experiments/HPCA/WorkloadsOutput/out_${jobName}.txt \
+10 \
+3600
 EOF
 
             chmod +x "$sbatchFile"

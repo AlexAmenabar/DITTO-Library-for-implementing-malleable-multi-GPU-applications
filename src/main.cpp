@@ -2646,8 +2646,9 @@ int unifiedMemoryTest(schInfo_t *schInfo, size_t nGPUs){
     const size_t cores[1] =  {0};
 
 
-    size_t nN = 3;
-    size_t arrayN[nN] = {(size_t)1024 * (size_t)8 / (size_t)4, (size_t)1024 * (size_t)64 / (size_t)4, (size_t)1024 * (size_t)512 / (size_t)4};
+    size_t nN = 1;
+    //size_t arrayN[nN] = {(size_t)1024 * (size_t)8 / (size_t)4, (size_t)1024 * (size_t)64 / (size_t)4, (size_t)1024 * (size_t)512 / (size_t)4};
+    size_t arrayN[nN] = {(size_t)1024 * (size_t)512 / (size_t)4};
 
     //size_t N = (size_t)1048576 / 4;// * (size_t)1024 * (size_t)8;
     //N = (size_t)1024 * (size_t)512 / (size_t)4;    
@@ -2781,6 +2782,1067 @@ int unifiedMemoryTest(schInfo_t *schInfo, size_t nGPUs){
     }
     return 1;
 }
+
+int jobExecutionTimesTest(schInfo_t *schInfo, size_t nGPUs){
+
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+
+    size_t nJobTypes = 3; 
+    
+    // set bounds for parameters (TEMPORAL, IMPROVE WHEN POSSIBLE)
+    size_t nN = 2;
+    size_t N[4] = {(size_t)1048576 * (size_t)16 / (size_t)4, (size_t)1048576 * (size_t)1024 / (size_t)4}; // SMALL; MEDIAN; LARGE JOBS
+    
+    size_t nT = 2;
+    size_t T[4] = {500, 5000}; // SMALL; MEDIAN; LARGE JOBS
+    
+    size_t nK = 2;
+    size_t K[5] = {5000, 50000}; // constant for all jobs types
+
+    size_t nG = 4;
+    size_t goodGPUs[4] = {1, 2, 4, 8}; // SMALL; MEDIAN; LARGE JOBS (a different request is 'bad', underutilization or overutilization)
+    
+    struct timespec start, end;
+    double et;
+
+    for(size_t jobType = 2; jobType < nJobTypes; jobType++){
+
+        for(size_t iN = 0; iN < nN; iN ++){
+
+            for(size_t iGPUs = 0; iGPUs < nG; iGPUs ++){
+
+                for(size_t iT = 0; iT < nT; iT ++){
+
+                    for(size_t iK = 0; iK < nK; iK ++){
+
+                        jobResources_t *jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+                        jobResources->nGPUs = goodGPUs[iGPUs];
+                        jobResources->idGPUs = (size_t*)calloc(jobResources->nGPUs, sizeof(size_t));
+
+                        for(size_t i = 0; i<jobResources->nGPUs; i++){
+
+                            jobResources->idGPUs[i] = i;
+                        }
+
+                        // weak scalability
+                        size_t ja = N[iN]; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                        size_t jT = T[iT];
+                        size_t jK = K[iK];
+                        
+                        size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+                        // communication method
+                        size_t jPinned = pinned[0];
+                        size_t jAsync = async[0];
+                        size_t jSteps = steps[0];
+                        size_t jCores = cores[0];
+                        int jReconfDir = 1;
+                        size_t jmall = 1;
+
+
+                        // launch job
+                        jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+                        jobLauncher->jobType = MALLEABLE;
+                        jobLauncher->jobPriority = LOW;
+                        jobLauncher->nReqGPUs = 8; // no matter
+                        jobLauncher->nReqMinGPUs = 1;
+                        jobLauncher->launchTimeStep = 1; // no matter
+
+                        // jargs
+                        void* jargs[20];
+
+                        if(jobType == 0){
+
+                            jargs[0] = &ja;
+                            jargs[1] = &jT;
+                            jargs[2] = &jK;
+                            jargs[3] = &jS;
+                            jargs[4] = &jPinned;
+                            jargs[5] = &jAsync; // async
+                            jargs[6] = &jSteps;
+                            jargs[7] = &jCores;
+                            jargs[8] = &jReconfDir;
+                            jargs[9] = &jmall;
+
+                            jobLauncher->appType = 0; // no matter
+                            jobLauncher->argc = 9;
+                            jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                            jobLauncher->launchFunc = &launch_iterative_app;
+
+                            addPendingJob(jobLauncher); // add to pending list
+                            launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources); // launch from pending list
+                            
+                            clock_gettime(CLOCK_MONOTONIC, &(start)); 
+
+                            // wait until job finishes and finish job
+                            while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                                sleep(1);
+                            }
+
+                            finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+
+                            clock_gettime(CLOCK_MONOTONIC, &end);
+                            et = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+                            printf("[%zu, %zu, %zu, %zu, %zu]: %lf\n", jobType, ja, jT, jK, goodGPUs[iGPUs], et);
+                            fflush(stdout);
+
+                            removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                            
+                            fflush(stdout);
+                        }
+                        else if(jobType == 1){
+
+                            size_t nCPUK = 5;
+                            size_t cpuK[5] = {10, 20, 40, 80, 160}; // constant for all jobs types
+
+                            for(size_t iCPUK = 0; iCPUK < nCPUK; iCPUK ++){
+
+                                size_t jCPUK = cpuK[iCPUK];
+                                size_t jPhases = 2;
+                                size_t jPhase0 = 1;
+                                size_t jPhase1 = 0;
+
+                                jargs[0] = &ja;
+                                jargs[1] = &jT;
+                                jargs[2] = &jK;
+                                jargs[3] = &jCPUK;
+                                jargs[4] = &jPhases;
+                                jargs[5] = &jS;
+                                jargs[6] = &jPinned;
+                                jargs[7] = &jAsync; // async
+                                jargs[8] = &jSteps;
+                                jargs[9] = &jCores;
+                                jargs[10] = &jReconfDir;
+                                jargs[11] = &jPhase0;
+                                jargs[12] = &jPhase1;
+
+                                jargs[13] = &jmall;
+
+                                jobLauncher->appType = 0; // no matter
+                                jobLauncher->argc = 13;
+                                jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                                jobLauncher->launchFunc = &launch_phases_app;
+
+                                addPendingJob(jobLauncher); // add to pending list
+                                launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources); // launch from pending list
+                                
+                                clock_gettime(CLOCK_MONOTONIC, &(start)); 
+
+                                // wait until job finishes and finish job
+                                while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                                    sleep(1);
+                                }
+
+                                finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+
+                                clock_gettime(CLOCK_MONOTONIC, &end);
+                                et = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+                                printf("[%zu, %zu, %zu, %zu, %zu, %zu]: %lf\n", jobType, ja, jT, jK, jCPUK, goodGPUs[iGPUs], et);
+                                fflush(stdout);
+
+                                removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                                
+                                fflush(stdout);
+                            }
+                        }
+                        else if(jobType == 2){
+                            
+                            size_t arrP[3] = {100, 10, 1};
+                           
+                            size_t nP;
+                            if(iGPUs == 0)
+                                nP = 1;
+                            else
+                                nP = 3;
+
+                            for(size_t iP = 0; iP < nP; iP ++){
+                                
+                                size_t jP = arrP[iP];
+
+                                jargs[0] = &ja;
+                                jargs[1] = &jT;
+                                jargs[2] = &jK;
+                                jargs[3] = &jP;
+                                jargs[4] = &jS;
+                                jargs[5] = &jPinned;
+                                jargs[6] = &jAsync; // async
+                                jargs[7] = &jSteps;
+                                jargs[8] = &jCores;
+                                jargs[9] = &jReconfDir;
+                                jargs[10] = &jmall;
+
+                                jobLauncher->appType = 2; // no matter
+                                jobLauncher->argc = 10;
+                                jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                                jobLauncher->launchFunc = &launch_NCCL_communications_app;
+
+                                addPendingJob(jobLauncher); // add to pending list
+                                launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources); // launch from pending list
+                                
+                                clock_gettime(CLOCK_MONOTONIC, &(start)); 
+
+                                // wait until job finishes and finish job
+                                while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                                    sleep(1);
+                                }
+
+                                finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+                                
+                                clock_gettime(CLOCK_MONOTONIC, &end);
+                                et = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+                                printf("[%zu, %zu, %zu, %zu, %zu, %zu]: %lf\n", jobType, ja, jT, jK, jP, goodGPUs[iGPUs], et);
+                                fflush(stdout);
+
+                                removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                                
+                                fflush(stdout);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return 1;
+}
+
+
+
+int runJacobi(schInfo_t *schInfo, size_t nGPUs){
+
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+    size_t nT = 1;
+    size_t rows = 2;
+    size_t cols = 2;
+
+    size_t nRows[rows] = {(size_t)512, (size_t)2048};
+    size_t nCols[cols] = {(size_t)65536, (size_t)524288};
+    //size_t T[nT] = {10000, 100000, 150000};
+    size_t T[nT] = {100};
+    
+    size_t nRepetitions = 100;
+
+    size_t nConfigurations = 6;
+    jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 2;
+    jobResources[0]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+    jobResources[0]->idGPUs[1] = 1;
+  
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 2;
+
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 2;
+    jobResources[2]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 0;
+    jobResources[2]->idGPUs[1] = 4;
+
+
+    jobResources[3] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[3]->nGPUs = 4;
+    jobResources[3]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[3]->idGPUs[0] = 0;
+    jobResources[3]->idGPUs[1] = 1;
+    jobResources[3]->idGPUs[2] = 2;
+    jobResources[3]->idGPUs[3] = 3;
+
+    jobResources[4] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[4]->nGPUs = 4;
+    jobResources[4]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[4]->idGPUs[0] = 0;
+    jobResources[4]->idGPUs[1] = 1;
+    jobResources[4]->idGPUs[2] = 4;
+    jobResources[4]->idGPUs[3] = 5;
+
+    jobResources[5] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[5]->nGPUs = 4;
+    jobResources[5]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[5]->idGPUs[0] = 0;
+    jobResources[5]->idGPUs[1] = 2;
+    jobResources[5]->idGPUs[2] = 4;
+    jobResources[5]->idGPUs[3] = 6;
+
+    // argv for the input of the application
+    void* jargs[12];
+
+            
+    for(size_t i = 0; i<rows; i++){
+
+        for(size_t j = 0; j<cols; j++){ 
+
+            for(size_t t = 0; t<nT; t++){
+                for(size_t rec = 0; rec < nConfigurations; rec++){
+
+                    for(size_t rep = 0; rep<nRepetitions; rep++){
+                                                        
+                        // weak scalability
+                        size_t jRows = nRows[i]; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                        size_t jCols = nCols[j];
+                        size_t jT = T[t];
+                        size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+                        // communication method
+                        size_t jPinned = pinned[0];
+                        size_t jAsync = async[0];
+                        size_t jSteps = steps[0];
+                        size_t jCores = cores[0];
+                        size_t test = 0;
+                        size_t jmall = 1;
+
+                        jargs[0] = &jRows;
+                        jargs[1] = &jCols;
+                        jargs[2] = &jT;
+                        jargs[3] = &jS;
+                        jargs[4] = &jPinned;
+                        jargs[5] = &jAsync; // async
+                        jargs[6] = &jSteps;
+                        jargs[7] = &jCores;
+                        jargs[8] = &test;
+                        jargs[9] = &jmall;
+
+                        // launch job
+                        jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+                        jobLauncher->jobType = MALLEABLE;
+                        jobLauncher->jobPriority = LOW;
+                        jobLauncher->nReqGPUs = 8; // no matter
+                        jobLauncher->nReqMinGPUs = 1;
+                        jobLauncher->launchTimeStep = 1; // no matter
+                        jobLauncher->appType = 2; // no matter
+                        jobLauncher->argc = 9;
+                        jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                        jobLauncher->launchFunc = &launch_jacobi_stencil;
+
+
+                        printf(" [%zu, %zu, %zu, %zu]: ", jRows, jCols, jT, rec);
+                        fflush(stdout);
+                        addPendingJob(jobLauncher); // add to pending list
+                        launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[rec]); // launch from pending list
+                        
+                        // notify the job to start running
+                        notifyStartRunning(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl);
+
+                        // wait until job finishes and finish job
+                        while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                            sleep(1);
+                        }
+
+                        finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+                        removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                        
+                        fflush(stdout);
+                    }
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+
+
+int nbody(schInfo_t *schInfo, size_t nGPUs){
+
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+    size_t nT = 1;
+    size_t nN = 2;
+
+    size_t N[nN] = {(size_t)16384, (size_t)262144};
+    //size_t T[nT] = {1000, 2500, 3000};
+    size_t T[nT] = {100};
+
+
+    size_t nRepetitions = 100;
+
+    /*size_t nConfigurations = 3;
+    jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 1;
+    jobResources[0]->idGPUs = (size_t*)calloc(1, sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 1;
+  
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 4;
+    jobResources[2]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 0;
+    jobResources[2]->idGPUs[1] = 1;
+    jobResources[2]->idGPUs[2] = 2;
+    jobResources[2]->idGPUs[3] = 3;*/
+
+
+    size_t nConfigurations = 6;
+    jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 2;
+    jobResources[0]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+    jobResources[0]->idGPUs[1] = 1;
+  
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 2;
+
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 2;
+    jobResources[2]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 0;
+    jobResources[2]->idGPUs[1] = 4;
+
+
+    jobResources[3] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[3]->nGPUs = 4;
+    jobResources[3]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[3]->idGPUs[0] = 0;
+    jobResources[3]->idGPUs[1] = 1;
+    jobResources[3]->idGPUs[2] = 2;
+    jobResources[3]->idGPUs[3] = 3;
+
+    jobResources[4] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[4]->nGPUs = 4;
+    jobResources[4]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[4]->idGPUs[0] = 0;
+    jobResources[4]->idGPUs[1] = 1;
+    jobResources[4]->idGPUs[2] = 4;
+    jobResources[4]->idGPUs[3] = 5;
+
+    jobResources[5] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[5]->nGPUs = 4;
+    jobResources[5]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[5]->idGPUs[0] = 0;
+    jobResources[5]->idGPUs[1] = 2;
+    jobResources[5]->idGPUs[2] = 4;
+    jobResources[5]->idGPUs[3] = 6;
+
+
+    // argv for the input of the application
+    void* jargs[12];
+    for(size_t i = 0; i<nN; i++){
+
+        for(size_t t = 0; t<nT; t++){
+
+            for(size_t rec = 0; rec < nConfigurations; rec++){
+
+                for(size_t rep = 0; rep<nRepetitions; rep++){
+                                                    
+                    // weak scalability
+                    size_t jN = N[i]; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                    size_t jT = T[t];
+                    size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+                    // communication method
+                    size_t jPinned = pinned[0];
+                    size_t jAsync = async[0];
+                    size_t jSteps = steps[0];
+                    size_t jCores = cores[0];
+                    size_t test = 0;
+                    size_t jmall = 1;
+
+                    jargs[0] = &jN;
+                    jargs[1] = &jT;
+                    jargs[2] = &jS;
+                    jargs[3] = &jPinned;
+                    jargs[4] = &jAsync; // async
+                    jargs[5] = &jSteps;
+                    jargs[6] = &jCores;
+                    jargs[7] = &test;
+                    jargs[8] = &jmall;
+
+                    // launch job
+                    jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+                    jobLauncher->jobType = MALLEABLE;
+                    jobLauncher->jobPriority = LOW;
+                    jobLauncher->nReqGPUs = 8; // no matter
+                    jobLauncher->nReqMinGPUs = 1;
+                    jobLauncher->launchTimeStep = 1; // no matter
+                    jobLauncher->appType = 2; // no matter
+                    jobLauncher->argc = 8;
+                    jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                    jobLauncher->launchFunc = &launch_n_body;
+
+
+                    printf(" [%zu, %zu, %zu]: ", jN, jT, rec);
+                    fflush(stdout);
+                    addPendingJob(jobLauncher); // add to pending list
+                    launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[rec]); // launch from pending list
+                    
+                    // notify the job to start running
+                    notifyStartRunning(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl);
+
+                    // wait until job finishes and finish job
+                    while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                        sleep(1);
+                    }
+
+                    finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+                    removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                    
+                    fflush(stdout);
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+
+
+int fft(schInfo_t *schInfo, size_t nGPUs){
+
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+    size_t nT = 1;
+    size_t nN = 2;
+
+    size_t nRows[nN] = {(size_t)1024, (size_t)8192};
+    size_t nCols[nN] = {(size_t)1024, (size_t)8192};
+
+    //size_t T[nT] = {10000, 20000};
+    size_t T[nT] = {100};
+
+
+    size_t nRepetitions = 100;
+
+    /*size_t nConfigurations = 3;
+    jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 1;
+    jobResources[0]->idGPUs = (size_t*)calloc(1, sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 1;
+  
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 4;
+    jobResources[2]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 0;
+    jobResources[2]->idGPUs[1] = 1;
+    jobResources[2]->idGPUs[2] = 2;
+    jobResources[2]->idGPUs[3] = 3;*/
+
+    size_t nConfigurations = 6;
+    jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 2;
+    jobResources[0]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+    jobResources[0]->idGPUs[1] = 1;
+  
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 2;
+
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 2;
+    jobResources[2]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 0;
+    jobResources[2]->idGPUs[1] = 4;
+
+
+    jobResources[3] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[3]->nGPUs = 4;
+    jobResources[3]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[3]->idGPUs[0] = 0;
+    jobResources[3]->idGPUs[1] = 1;
+    jobResources[3]->idGPUs[2] = 2;
+    jobResources[3]->idGPUs[3] = 3;
+
+    jobResources[4] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[4]->nGPUs = 4;
+    jobResources[4]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[4]->idGPUs[0] = 0;
+    jobResources[4]->idGPUs[1] = 1;
+    jobResources[4]->idGPUs[2] = 4;
+    jobResources[4]->idGPUs[3] = 5;
+
+    jobResources[5] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[5]->nGPUs = 4;
+    jobResources[5]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[5]->idGPUs[0] = 0;
+    jobResources[5]->idGPUs[1] = 2;
+    jobResources[5]->idGPUs[2] = 4;
+    jobResources[5]->idGPUs[3] = 6;
+
+
+    // argv for the input of the application
+    void* jargs[12];
+    for(size_t i = 0; i<nN; i++){
+
+        for(size_t t = 0; t<nT; t++){
+
+            for(size_t rec = 0; rec < nConfigurations; rec++){
+
+                for(size_t rep = 0; rep<nRepetitions; rep++){
+                                                    
+                    // weak scalability
+                    size_t jNROWS = nRows[i]; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                    size_t jNCOLS = nCols[i]; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                    size_t jT = T[t];
+                    size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+                    // communication method
+                    size_t jPinned = pinned[0];
+                    size_t jAsync = async[0];
+                    size_t jSteps = steps[0];
+                    size_t jCores = cores[0];
+                    size_t test = 0;
+                    size_t jmall = 1;
+
+                    jargs[0] = &jNROWS;
+                    jargs[1] = &jNCOLS;
+                    jargs[2] = &jT;
+                    jargs[3] = &jS;
+                    jargs[4] = &jPinned;
+                    jargs[5] = &jAsync; // async
+                    jargs[6] = &jSteps;
+                    jargs[7] = &jCores;
+                    jargs[8] = &test;
+                    jargs[9] = &jmall;
+
+                    // launch job
+                    jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+                    jobLauncher->jobType = MALLEABLE;
+                    jobLauncher->jobPriority = LOW;
+                    jobLauncher->nReqGPUs = 8; // no matter
+                    jobLauncher->nReqMinGPUs = 1;
+                    jobLauncher->launchTimeStep = 1; // no matter
+                    jobLauncher->appType = 2; // no matter
+                    jobLauncher->argc = 9;
+                    jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                    jobLauncher->launchFunc = &launch_FFT;
+
+
+                    printf(" [%zu, %zu, %zu]: ", jNROWS, jT, rec);
+                    fflush(stdout);
+                    addPendingJob(jobLauncher); // add to pending list
+                    launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[rec]); // launch from pending list
+                    
+                    // notify the job to start running
+                    notifyStartRunning(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl);
+
+                    // wait until job finishes and finish job
+                    while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                        sleep(1);
+                    }
+
+                    finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+                    removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                    
+                    fflush(stdout);
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+int commBench(schInfo_t *schInfo, size_t nGPUs){
+
+    
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+    size_t nT = 1;
+    size_t nN = 4;
+
+    size_t N[nN] = {(size_t)1024, (size_t)4096, (size_t)16384, (size_t)65536};
+    size_t T[nT] = {100};
+
+
+    size_t nRepetitions = 100;
+
+    size_t nConfigurations = 6;
+    jobResources_t **jobResources = (jobResources_t**)calloc(nConfigurations, sizeof(jobResources_t*));
+
+    jobResources[0] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[0]->nGPUs = 2;
+    jobResources[0]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[0]->idGPUs[0] = 0;
+    jobResources[0]->idGPUs[1] = 1;
+  
+    jobResources[1] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[1]->nGPUs = 2;
+    jobResources[1]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[1]->idGPUs[0] = 0;
+    jobResources[1]->idGPUs[1] = 2;
+
+    jobResources[2] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[2]->nGPUs = 2;
+    jobResources[2]->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources[2]->idGPUs[0] = 0;
+    jobResources[2]->idGPUs[1] = 4;
+
+
+    jobResources[3] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[3]->nGPUs = 4;
+    jobResources[3]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[3]->idGPUs[0] = 0;
+    jobResources[3]->idGPUs[1] = 1;
+    jobResources[3]->idGPUs[2] = 2;
+    jobResources[3]->idGPUs[3] = 3;
+
+    jobResources[4] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[4]->nGPUs = 4;
+    jobResources[4]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[4]->idGPUs[0] = 0;
+    jobResources[4]->idGPUs[1] = 1;
+    jobResources[4]->idGPUs[2] = 4;
+    jobResources[4]->idGPUs[3] = 5;
+
+    jobResources[5] = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources[5]->nGPUs = 4;
+    jobResources[5]->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    jobResources[5]->idGPUs[0] = 0;
+    jobResources[5]->idGPUs[1] = 2;
+    jobResources[5]->idGPUs[2] = 4;
+    jobResources[5]->idGPUs[3] = 6;
+
+    // argv for the input of the application
+    void* jargs[12];
+
+                
+    for(size_t i = 0; i<nN; i++){
+
+        for(size_t t = 0; t<nT; t++){
+                
+            for(size_t rec = 0; rec < nConfigurations; rec++){
+    
+                for(size_t rep = 0; rep<nRepetitions; rep++){
+                                                    
+                    // weak scalability
+                    size_t ja = N[i]; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+                    size_t jT = T[t];
+                    size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+                    // communication method
+                    size_t jPinned = pinned[0];
+                    size_t jAsync = async[0];
+                    size_t jSteps = steps[0];
+                    size_t jCores = cores[0];
+                    size_t test = 0;
+                    size_t jmall = 1;
+
+                    jargs[0] = &ja;
+                    jargs[1] = &jT;
+                    jargs[2] = &jS;
+                    jargs[3] = &jPinned;
+                    jargs[4] = &jAsync; // async
+                    jargs[5] = &jSteps;
+                    jargs[6] = &jCores;
+                    jargs[7] = &test;
+                    jargs[8] = &jmall;
+
+                    // launch job
+                    jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+                    jobLauncher->jobType = MALLEABLE;
+                    jobLauncher->jobPriority = LOW;
+                    jobLauncher->nReqGPUs = 8; // no matter
+                    jobLauncher->nReqMinGPUs = 1;
+                    jobLauncher->launchTimeStep = 1; // no matter
+                    jobLauncher->appType = 2; // no matter
+                    jobLauncher->argc = 8;
+                    jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+                    jobLauncher->launchFunc = &launch_communication_bench;
+
+
+                    printf(" [%zu, %zu, %zu]: ", ja, jT, rec);
+                    fflush(stdout);
+                    addPendingJob(jobLauncher); // add to pending list
+                    launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources[rec]); // launch from pending list
+                    
+                    // notify the job to start running
+                    notifyStartRunning(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl);
+
+                    // wait until job finishes and finish job
+                    while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+                        sleep(1);
+                    }
+
+                    finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+                    removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+                    
+                    fflush(stdout);
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+int jacobiReconf(schInfo_t *schInfo, size_t nGPUs){
+    
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+    size_t nRows = (size_t)512;
+    size_t nCols = (size_t)131072;
+    size_t T = 100000;
+    
+    size_t nRepetitions = 1;
+
+    jobResources_t *jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources->nGPUs = 2;
+    jobResources->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources->idGPUs[0] = 0;
+    jobResources->idGPUs[1] = 1;
+  
+
+    // argv for the input of the application
+    void* jargs[12];
+                                                  
+    // weak scalability
+    size_t jRows = nRows; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+    size_t jCols = nCols;
+    size_t jT = T;
+    size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+    // communication method
+    size_t jPinned = pinned[0];
+    size_t jAsync = async[0];
+    size_t jSteps = steps[0];
+    size_t jCores = cores[0];
+    int jReconfDir = 1;
+    size_t jmall = 1;
+
+    jargs[0] = &jRows;
+    jargs[1] = &jCols;
+    jargs[2] = &jT;
+    jargs[3] = &jS;
+    jargs[4] = &jPinned;
+    jargs[5] = &jAsync; // async
+    jargs[6] = &jSteps;
+    jargs[7] = &jCores;
+    jargs[8] = &jReconfDir;
+    jargs[9] = &jmall;
+
+    // launch job
+    jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+    jobLauncher->jobType = MALLEABLE;
+    jobLauncher->jobPriority = LOW;
+    jobLauncher->nReqGPUs = 8; // no matter
+    jobLauncher->nReqMinGPUs = 1;
+    jobLauncher->launchTimeStep = 1; // no matter
+    jobLauncher->appType = 2; // no matter
+    jobLauncher->argc = 9;
+    jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+    jobLauncher->launchFunc = &launch_jacobi_stencil;
+
+
+    printf(" [%zu, %zu, %zu]: ", jRows, jCols, jT);
+    fflush(stdout);
+    addPendingJob(jobLauncher); // add to pending list
+    launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources); // launch from pending list
+    
+
+    // get job control
+    jobControl_t *jobControl = getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl;
+    
+    // schedule reconfiguration
+    jobResources_t *reconfJobResources = (jobResources_t*)calloc(1,sizeof(jobResources_t));
+    reconfJobResources->nGPUs = 4;
+    reconfJobResources->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    reconfJobResources->idGPUs[0] = 0;
+    reconfJobResources->idGPUs[1] = 2;
+    reconfJobResources->idGPUs[2] = 4;
+    reconfJobResources->idGPUs[3] = 6;
+
+
+    sleep(20);
+
+    // schedule
+    scheduleReconfiguration(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0, reconfJobResources);
+
+    // wait until the reconfiguration finishes and finish it
+
+    while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
+        sleep(1);
+    }
+    jobFinishedReconfiguration(schInfo, getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
+
+
+    // wait until job finishes and finish job
+    while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+        sleep(1);
+    }
+
+    finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+    removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+    
+    fflush(stdout);
+
+    return 1;
+}
+
+
+int nbodyReconf(schInfo_t *schInfo, size_t nGPUs){
+    
+    size_t nCommunicationModes = 1;
+    const char *communicationModes[1] = {"OASYNC"};
+    const size_t async[1] =  {1};
+    const size_t pinned[1] = {0};
+    const size_t steps[1] =  {0};
+    const size_t cores[1] =  {0};
+
+    size_t N = (size_t)131072;
+    size_t T = 2500;
+    
+    jobResources_t *jobResources = (jobResources_t*)calloc(1, sizeof(jobResources_t));
+    jobResources->nGPUs = 2;
+    jobResources->idGPUs = (size_t*)calloc(2, sizeof(size_t));
+    jobResources->idGPUs[0] = 0;
+    jobResources->idGPUs[1] = 1;
+  
+
+    // argv for the input of the application
+    void* jargs[12];
+                       
+    size_t jN = N; // the amount of data is fixed, each partition changes depending on the number of GPUs and partitions
+    size_t jT = T;
+    size_t jS = 1; //arrPartitions[nP]; // number of partitions per GPU
+
+    // communication method
+    size_t jPinned = pinned[0];
+    size_t jAsync = async[0];
+    size_t jSteps = steps[0];
+    size_t jCores = cores[0];
+    int jReconfDir = 1;
+    size_t jmall = 1;
+
+    jargs[0] = &jN;
+    jargs[1] = &jT;
+    jargs[2] = &jS;
+    jargs[3] = &jPinned;
+    jargs[4] = &jAsync; // async
+    jargs[5] = &jSteps;
+    jargs[6] = &jCores;
+    jargs[7] = &jReconfDir;
+    jargs[8] = &jmall;
+
+    // launch job
+    jobLauncher_t *jobLauncher = (jobLauncher_t*)calloc(1, sizeof(jobLauncher_t));
+    jobLauncher->jobType = MALLEABLE;
+    jobLauncher->jobPriority = LOW;
+    jobLauncher->nReqGPUs = 8; // no matter
+    jobLauncher->nReqMinGPUs = 1;
+    jobLauncher->launchTimeStep = 1; // no matter
+    jobLauncher->appType = 2; // no matter
+    jobLauncher->argc = 8;
+    jobLauncher->argv = jargs; // 2 extra arguments: whether the job is malleable and the job control (latter set)
+    jobLauncher->launchFunc = &launch_n_body;
+
+
+    printf(" [%zu, %zu]: ", jN, jT);
+    fflush(stdout);
+    addPendingJob(jobLauncher); // add to pending list
+    launchJob(schInfo, getJobFromQueue(&(schInfo->pendingJobs), 0), 0, jobResources); // launch from pending list
+    
+
+    // get job control
+    jobControl_t *jobControl = getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl;
+    
+    // schedule reconfiguration
+    jobResources_t *reconfJobResources = (jobResources_t*)calloc(1,sizeof(jobResources_t));
+    reconfJobResources->nGPUs = 4;
+    reconfJobResources->idGPUs = (size_t*)calloc(4, sizeof(size_t));
+    reconfJobResources->idGPUs[0] = 0;
+    reconfJobResources->idGPUs[1] = 2;
+    reconfJobResources->idGPUs[2] = 4;
+    reconfJobResources->idGPUs[3] = 6;
+
+    sleep(20);
+
+    // schedule
+    scheduleReconfiguration(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0, reconfJobResources);
+
+    // wait until the reconfiguration finishes and finish it
+
+    while(checkReconfigurationDone(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl) == 1){
+        sleep(1);
+    }
+    jobFinishedReconfiguration(schInfo, getJobFromQueue(&(schInfo->reconfiguringJobs), 0), 0);
+
+
+    // wait until job finishes and finish job
+    while(!checkJobFinished(getJobFromQueue(&(schInfo->runningJobs), 0)->jobControl)){
+
+        sleep(1);
+    }
+
+    finishJob(schInfo, getJobFromQueue(&(schInfo->runningJobs), 0), 0);
+    removeJobFromQueueByIndex(&schInfo->finishedJobs, 0);
+    
+    fflush(stdout);
+
+    return 1;
+}
+
+
+
 
 
 int main(int argc, char* argv[]){
@@ -2944,6 +4006,55 @@ int main(int argc, char* argv[]){
     printf("\n\n\n[UNIFIED MEMORY]\n");
     fflush(stdout);
     unifiedMemoryTest(schInfo, 8);
+
+#elif JOBSTIMES
+    // UNIFIED MEMORY ANALYSIS
+    printf("\n\n\n[JOB EXECUTION TIMES]\n");
+    fflush(stdout);
+    jobExecutionTimesTest(schInfo, 8);
+
+#elif RUNJACOBI
+
+    // UNIFIED MEMORY ANALYSIS
+    printf("\n\n\n[JOB EXECUTION TIMES]\n");
+    fflush(stdout);
+    runJacobi(schInfo, 8);
+
+#elif NBODY
+
+    // UNIFIED MEMORY ANALYSIS
+    printf("\n\n\n[JOB EXECUTION TIMES]\n");
+    fflush(stdout);
+    nbody(schInfo, 8);
+
+#elif FFT
+
+    fft(schInfo, 8);
+
+#elif COMMBENCH
+
+    // UNIFIED MEMORY ANALYSIS
+    printf("\n\n\n[COMM]\n");
+    fflush(stdout);
+    commBench(schInfo, 8);
+
+    printf("\n\n\n[JACOBI]\n");
+    fflush(stdout);
+    runJacobi(schInfo, 8);
+
+    printf("\n\n\n[NBODY]\n");
+    fflush(stdout);
+    nbody(schInfo, 8);
+
+    printf("\n\n\n[FFT]\n");
+    fflush(stdout);
+    fft(schInfo, 8);
+
+#elif RECONFAPPS
+
+    jacobiReconf(schInfo, 8);
+    nbodyReconf(schInfo, 8);
+
 #endif
 
     exit(0);

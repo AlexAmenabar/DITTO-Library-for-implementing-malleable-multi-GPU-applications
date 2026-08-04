@@ -5,6 +5,8 @@
 typedef struct schInfo_t schInfo_t;
 
 void greedy(schInfo_t *schInfo);
+void greedyMin(schInfo_t *schInfo);
+
 void sched(schInfo_t *schInfo);
 
 #endif
