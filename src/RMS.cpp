@@ -152,6 +152,9 @@ jobsTimeline_t* loadJobsFromFile(const char* jobsFileName){
 
             //printf(" %d = %zu\n", arg, (*val));
         }
+        size_t *val = (size_t*)malloc(sizeof(size_t));
+        (*val) = 0;
+        jobLauncher->argv[jobLauncher->argc-1] = (void*)val; // no testing
         
         pthread_mutex_unlock(&(printLock));
 
