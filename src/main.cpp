@@ -3502,9 +3502,9 @@ int commBench(schInfo_t *schInfo, size_t nGPUs){
     const size_t cores[1] =  {0};
 
     size_t nT = 1;
-    size_t nN = 4;
+    size_t nN = 3;
 
-    size_t N[nN] = {(size_t)1024, (size_t)4096, (size_t)16384, (size_t)65536};
+    size_t N[nN] = {(size_t)1024, (size_t)4096, (size_t)16384};
     size_t T[nT] = {100};
 
 
