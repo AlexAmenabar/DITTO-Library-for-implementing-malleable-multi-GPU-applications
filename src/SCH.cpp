@@ -123,6 +123,12 @@ void greedy(schInfo_t *schInfo){
         // launch job if possible
         if(nLaunchGPUs){
 
+            // n launch GPUs must be a power of 2
+            while(nLaunchGPUs != 1 && nLaunchGPUs != 2 && nLaunchGPUs != 4 && nLaunchGPUs != 8){
+
+                nLaunchGPUs --;
+            }
+
             // if the first job is launched, reinit the timeout
             if(iJob == 0){
 
@@ -210,6 +216,12 @@ void greedyMin(schInfo_t *schInfo){
 
         // launch job if possible
         if(nLaunchGPUs){
+
+            // n launch GPUs must be a power of 2
+            while(nLaunchGPUs != 1 && nLaunchGPUs != 2 && nLaunchGPUs != 4 && nLaunchGPUs != 8){
+
+                nLaunchGPUs --;
+            }
 
             // if the first job is launched, reinit the timeout
             if(iJob == 0){
