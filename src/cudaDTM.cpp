@@ -1180,7 +1180,7 @@ void reconfShrink(DTI_t *DTI){
             
             if(err != cudaSuccess){
                 
-                printf("Memcpy failed in reconfiguration going through the CPU: %s\n", canAccess, cudaGetErrorString(err));
+                printf("Memcpy failed in reconfiguration going through the CPU (%d): %s\n", canAccess, cudaGetErrorString(err));
             }
         }
     }        

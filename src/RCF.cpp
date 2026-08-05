@@ -215,6 +215,27 @@ size_t computeTopologyScore(schInfo_t *schInfo, size_t nGPUs, size_t *idGPUs){
 }*/
 
 
+void deallocateTmpJobResources(schInfo_t *schInfo, jobResources_t *jobResources){
+
+    // set GPUs allocated currently by the job as free
+    for(size_t i = 0; i<jobResources->nGPUs; i++){
+        
+        // set available temporally
+        schInfo->avGPUs[jobResources->idGPUs[i]] = 1;
+    }
+}
+
+void allocateTmpJobResources(schInfo_t *schInfo, jobResources_t *jobResources){
+
+    // set GPUs allocated currently by the job as free
+    for(size_t i = 0; i<jobResources->nGPUs; i++){
+        
+        // set available temporally
+        schInfo->avGPUs[jobResources->idGPUs[i]] = 0;
+    }
+}
+
+
 // look for topology-aware reconfigurations
 int improveN2NTopology(schInfo_t *schInfo, jobResources_t *jobResources, jobResources_t *reconfJobResources){
 
@@ -231,14 +252,6 @@ int improveN2NTopology(schInfo_t *schInfo, jobResources_t *jobResources, jobReso
 
     // consider only in the number of GPUs is 2 or 4
     if(nGPUs == 2 || nGPUs == 4){
-
-        // set GPUs allocated currently by the job as free
-        for(size_t i = 0; i<jobResources->nGPUs; i++){
-            
-            // set available temporally
-            schInfo->avGPUs[jobResources->idGPUs[i]] = 1;
-        }
-
 
         // compute the number of groups
         size_t nGroups = schInfo->nGPUs / nGPUs;
@@ -294,13 +307,6 @@ int improveN2NTopology(schInfo_t *schInfo, jobResources_t *jobResources, jobReso
                     groupFound = 1;
                 }
             }
-        }
-
-        // set GPUs in jobResources as allocated again
-        for(size_t i = 0; i<jobResources->nGPUs; i++){
-            
-            // set available temporally
-            schInfo->avGPUs[jobResources->idGPUs[i]] = 0;
         }
 
         // check whether the new set of GPUs is better than the previous one
@@ -582,7 +588,15 @@ void topology(schInfo_t *schInfo){
                             topoJobResources->nGPUs = reconfJobResources->nGPUs;
                             topoJobResources->idGPUs = (size_t*)calloc(topoJobResources->nGPUs, sizeof(size_t));
 
+
+                            // deallocate temporaly jobResources
+                            deallocateTmpJobResources(schInfo, jobResources);
+
+                            // find a better placement
                             int found = improveN2NTopology(schInfo, reconfJobResources, topoJobResources);
+
+                            // allocate again job resources
+                            allocateTmpJobResources(schInfo, jobResources);
 
                             /*printf("Shrink: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
 
@@ -665,7 +679,14 @@ void topology(schInfo_t *schInfo){
                             topoJobResources->nGPUs = reconfJobResources->nGPUs;
                             topoJobResources->idGPUs = (size_t*)calloc(topoJobResources->nGPUs, sizeof(size_t));
 
+
+                            // deallocate temporaly jobResources
+                            deallocateTmpJobResources(schInfo, jobResources);
+
                             int found = improveN2NTopology(schInfo, reconfJobResources, topoJobResources);
+
+                            // allocate again job resources
+                            allocateTmpJobResources(schInfo, jobResources);
 
                             /*printf("Expand: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
 
@@ -705,7 +726,15 @@ void topology(schInfo_t *schInfo){
                             topoJobResources->nGPUs = jobResources->nGPUs;
                             topoJobResources->idGPUs = (size_t*)calloc(topoJobResources->nGPUs, sizeof(size_t));
 
+
+                            // deallocate temporaly jobResources
+                            deallocateTmpJobResources(schInfo, jobResources);
+
                             int found = improveN2NTopology(schInfo, jobResources, topoJobResources);
+
+                            // allocate again job resources
+                            allocateTmpJobResources(schInfo, jobResources);
+
 
                             /*printf("Keep: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
 
@@ -1000,7 +1029,15 @@ void expand_topology(schInfo_t *schInfo){
                             topoJobResources->nGPUs = reconfJobResources->nGPUs;
                             topoJobResources->idGPUs = (size_t*)calloc(topoJobResources->nGPUs, sizeof(size_t));
 
+
+
+                            // deallocate temporaly job resources
+                            deallocateTmpJobResources(schInfo, jobResources);
+
                             int found = improveN2NTopology(schInfo, reconfJobResources, topoJobResources);
+
+                            // allocate again job resources
+                            allocateTmpJobResources(schInfo, jobResources);
 
                             /*printf("Expand: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
 
@@ -1040,7 +1077,15 @@ void expand_topology(schInfo_t *schInfo){
                             topoJobResources->nGPUs = jobResources->nGPUs;
                             topoJobResources->idGPUs = (size_t*)calloc(topoJobResources->nGPUs, sizeof(size_t));
 
+
+                            // deallocate temporaly job resources
+                            deallocateTmpJobResources(schInfo, jobResources);
+
                             int found = improveN2NTopology(schInfo, jobResources, topoJobResources);
+
+                            // allocate again job resources
+                            allocateTmpJobResources(schInfo, jobResources);
+
 
                             /*printf("Keep: found=%d nGPUs=%zu\n", found, topoJobResources->nGPUs);
 
