@@ -462,6 +462,12 @@ void finishJob(schInfo_t *schInfo, job_t *job, size_t runningJobIndex){
     // deallocate resources (RMS level)
     deallocateResources(schInfo, job->jobControl->jobResources);
 
+    // if job is reconfiguring, deallocate reconfiguration resources too
+    if(job->jobState == RECONFIGURING){
+        
+        deallocateResources(schInfo, job->jobControl->reconfJobResources);
+    }
+
     // deallocate resource structure // TODO: delete comment
     //deallocateJobResourcesStruct(&(job->jobControl->jobResources));
 
