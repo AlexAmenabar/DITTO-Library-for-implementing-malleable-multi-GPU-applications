@@ -452,21 +452,32 @@ void finishJob(schInfo_t *schInfo, job_t *job, size_t runningJobIndex){
 
     // kill job thread
     pthread_join(job->jobThread, NULL);
+    
+    // if job is reconfiguring, deallocate reconfiguration resources too
+    if(job->jobState == RECONFIGURING){
+        
+        //deallocateResources(schInfo, job->jobControl->reconfJobResources);
+
+        size_t iReconfJob = 0;
+
+        jobQueue_t *reconfiguringQueue = &(schInfo->reconfiguringJobs);
+        while(getJobFromQueue(reconfiguringQueue, iReconfJob)->jobId != job->jobId){
+            iReconfJob ++;
+        }
+
+        // finish reconfiguration
+        jobFinishedReconfiguration(schInfo, job, iReconfJob);
+    }
+
 
     // manage timers
     clock_gettime(CLOCK_MONOTONIC, &(job->jobEndRunning));
 
     // record event
     recordEvent(JOBFINISHED, job, job->jobControl->jobResources);
-    
+
     // deallocate resources (RMS level)
     deallocateResources(schInfo, job->jobControl->jobResources);
-
-    // if job is reconfiguring, deallocate reconfiguration resources too
-    if(job->jobState == RECONFIGURING){
-        
-        deallocateResources(schInfo, job->jobControl->reconfJobResources);
-    }
 
     // deallocate resource structure // TODO: delete comment
     //deallocateJobResourcesStruct(&(job->jobControl->jobResources));
@@ -597,29 +608,39 @@ void recordEvent(eventsEnum event, job_t *job, jobResources_t *jobResources){
 
 void allocateResources(schInfo_t *schInfo, jobResources_t *jobResources){
 
-    size_t i;
+    size_t i, counter = 0;
 
     // allocate selected resources for job
     for(i = 0; i<jobResources->nGPUs; i++){
 
         size_t gpu = jobResources->idGPUs[i];
-        schInfo->avGPUs[gpu] = 0; // set resource as not available
+        if(schInfo->avGPUs[gpu] == 1){
+            
+            // set available
+            schInfo->avGPUs[gpu] = 0; // not available
+            counter ++;
+        }
     }
 
-    schInfo->nAvGPUs -= jobResources->nGPUs; // update the number of available GPUs
+    schInfo->nAvGPUs -= counter; // update the number of available GPUs
 }
 
 void deallocateResources(schInfo_t *schInfo, jobResources_t *jobResources){
 
-    size_t i;
+    size_t i, counter = 0;
     
     for(i = 0; i<jobResources->nGPUs; i++){
 
         size_t gpu = jobResources->idGPUs[i];
-        schInfo->avGPUs[gpu] = 1; // not available
+        if(schInfo->avGPUs[gpu] == 0){
+            
+            // set available
+            schInfo->avGPUs[gpu] = 1; // not available
+            counter ++;
+        }
     }
 
-    schInfo->nAvGPUs += jobResources->nGPUs;
+    schInfo->nAvGPUs += counter;
 }
 
 void deallocateJobResourcesStruct(jobResources_t **jobResources){
