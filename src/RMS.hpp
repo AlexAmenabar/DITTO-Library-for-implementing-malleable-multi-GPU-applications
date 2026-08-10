@@ -6,6 +6,7 @@
 
 #include "jobQueue.hpp"
 #include "eventQueue.hpp"
+#include <stdint.h>
 
 #define JOB_MONITOR_STEPS 10
 #define DECISION_JOB_MONITOR_STEPS 5
@@ -238,20 +239,20 @@ struct schInfo_t {
     double totalPowerConsumption;
     double *totalPowerConsumptionPerGPU;
     // utilization
-    unsigned int totalUtilization;
-    unsigned int *totalUtilizationPerGPU;
+    uint64_t totalUtilization;
+    uint64_t *totalUtilizationPerGPU;
     // temperature
-    unsigned int temperatureSum;
-    unsigned int *temperatureSumPerGPU;
+    uint64_t temperatureSum;
+    uint64_t *temperatureSumPerGPU;
     // PCIe throughput
-    unsigned int totalThroughputPCIe; 
-    unsigned int *totalThroughputPCIePerGPU;
+    uint64_t totalThroughputPCIe; 
+    uint64_t *totalThroughputPCIePerGPU;
     // NVLink throughput
-    unsigned int totalThroughputNVLink;
-    unsigned int *totalThroughputNVLinkPerGPU;
+    uint64_t totalThroughputNVLink;
+    uint64_t *totalThroughputNVLinkPerGPU;
     // allocation time
-    unsigned int totalAllocationArea;
-    unsigned int *allocationTimePerGPU;
+    uint64_t totalAllocationArea;
+    uint64_t *allocationTimePerGPU;
     // number of reconfigurations
     unsigned int nReconfigurations;
     unsigned int nExpands;

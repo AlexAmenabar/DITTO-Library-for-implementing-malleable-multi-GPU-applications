@@ -789,7 +789,7 @@ void notifyStartRunning(jobControl_t *jobControl){
 // collect resource usage information each second. 
 // Utilization, energy consumption, temperature, PCIe throughput.. usage on each second
 // store results 
-void* resourceMonitoring(void *finished){
+/*void* resourceMonitoring(void *finished){
  
     int *finish = (int*)finished;
 
@@ -820,13 +820,13 @@ void* resourceMonitoring(void *finished){
     schInfo->totalPowerConsumption = 0.0;
     schInfo->totalPowerConsumptionPerGPU = (double*)malloc(device_count * sizeof(double));
     schInfo->totalUtilization = 0;
-    schInfo->totalUtilizationPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->totalUtilizationPerGPU = (uint64*)malloc(device_count * sizeof(uint64));
     schInfo->temperatureSum = 0;
-    schInfo->temperatureSumPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->temperatureSumPerGPU = (uint64*)malloc(device_count * sizeof(uint64));
     schInfo->totalThroughputPCIe = 0;
-    schInfo->totalThroughputPCIePerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->totalThroughputPCIePerGPU = (uint64*)malloc(device_count * sizeof(uint64));
     schInfo->totalAllocationArea = 0;
-    schInfo->allocationTimePerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->allocationTimePerGPU = (uint64*)malloc(device_count * sizeof(uint64));
 
     for(unsigned int i = 0; i < device_count; i++){
 
@@ -903,7 +903,7 @@ void* resourceMonitoring(void *finished){
             
                 Standard deviation for each value too
             */
-            schInfo->totalUtilization += util.gpu;
+/*            schInfo->totalUtilization += util.gpu;
             schInfo->totalUtilizationPerGPU[i] += util.gpu;
 
             schInfo->totalPowerConsumption += power / 1000.0;
@@ -912,8 +912,8 @@ void* resourceMonitoring(void *finished){
             schInfo->temperatureSum += temperature;
             schInfo->temperatureSumPerGPU[i] += temperature;
 
-            schInfo->totalAllocationArea += (int)schInfo->avGPUs[i];
-            schInfo->allocationTimePerGPU[i] += (int)schInfo->avGPUs[i];
+            schInfo->totalAllocationArea += (uint64)schInfo->avGPUs[i];
+            schInfo->allocationTimePerGPU[i] += (uint64)schInfo->avGPUs[i];
         }
 
         fflush(fUsage);  // ensure data is written
@@ -929,7 +929,7 @@ void* resourceMonitoring(void *finished){
     fclose(fUsage);
 
     return NULL;
-}
+}*/
 
 void initResourceMonitor(schInfo_t *schInfo, size_t nBatches){
 
@@ -965,19 +965,19 @@ void initResourceMonitor(schInfo_t *schInfo, size_t nBatches){
     schInfo->totalPowerConsumptionPerGPU = (double*)malloc(device_count * sizeof(double));
     // utilization
     schInfo->totalUtilization = 0;
-    schInfo->totalUtilizationPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->totalUtilizationPerGPU = (uint64_t*)malloc(device_count * sizeof(uint64_t));
     // tempretaure
     schInfo->temperatureSum = 0;
-    schInfo->temperatureSumPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->temperatureSumPerGPU = (uint64_t*)malloc(device_count * sizeof(uint64_t));
     // PCIe
     schInfo->totalThroughputPCIe = 0;
-    schInfo->totalThroughputPCIePerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->totalThroughputPCIePerGPU = (uint64_t*)malloc(device_count * sizeof(uint64_t));
     // NVLink
     schInfo->totalThroughputNVLink = 0;
-    schInfo->totalThroughputNVLinkPerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->totalThroughputNVLinkPerGPU = (uint64_t*)malloc(device_count * sizeof(uint64_t));
     // allocation
     schInfo->totalAllocationArea = 0;
-    schInfo->allocationTimePerGPU = (unsigned int*)malloc(device_count * sizeof(unsigned int));
+    schInfo->allocationTimePerGPU = (uint64_t*)malloc(device_count * sizeof(uint64_t));
     // number of reconfigurations
     schInfo->nReconfigurations = 0;
     schInfo->nExpands = 0;
@@ -1163,23 +1163,23 @@ void stepResourceMonitor(schInfo_t *schInfo){
            
 
         // store in accumulated values
-        schInfo->totalUtilization += util.gpu;
-        schInfo->totalUtilizationPerGPU[i] += util.gpu;
+        schInfo->totalUtilization += (uint64_t)util.gpu;
+        schInfo->totalUtilizationPerGPU[i] += (uint64_t)util.gpu;
 
         schInfo->totalPowerConsumption += power / 1000.0;
         schInfo->totalPowerConsumptionPerGPU[i] += power / 1000.0;
         
-        schInfo->temperatureSum += temperature;
-        schInfo->temperatureSumPerGPU[i] += temperature;
+        schInfo->temperatureSum += (uint64_t)temperature;
+        schInfo->temperatureSumPerGPU[i] += (uint64_t)temperature;
 
-        schInfo->totalAllocationArea += 1 - (unsigned int)schInfo->avGPUs[i];
-        schInfo->allocationTimePerGPU[i] += 1 - (unsigned int)schInfo->avGPUs[i];
+        schInfo->totalAllocationArea += 1 - (uint64_t)schInfo->avGPUs[i];
+        schInfo->allocationTimePerGPU[i] += 1 - (uint64_t)schInfo->avGPUs[i];
 
-        schInfo->totalThroughputPCIe += tx_throughput + rx_throughput; // accumulate throughput
-        schInfo->totalThroughputPCIePerGPU[i] += tx_throughput + rx_throughput;
+        schInfo->totalThroughputPCIe += (uint64_t)tx_throughput + rx_throughput; // accumulate throughput
+        schInfo->totalThroughputPCIePerGPU[i] += (uint64_t)tx_throughput + rx_throughput;
 
-        schInfo->totalThroughputNVLink += schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
-        schInfo->totalThroughputNVLinkPerGPU[i] += schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
+        schInfo->totalThroughputNVLink += (uint64_t)schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
+        schInfo->totalThroughputNVLinkPerGPU[i] += (uint64_t)schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
     }
 
     fflush(fUsage);  // ensure data is written

@@ -5,6 +5,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include <nccl.h>
+ #include <stdint.h>
 
 
 
