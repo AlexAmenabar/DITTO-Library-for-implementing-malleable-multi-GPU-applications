@@ -463,7 +463,7 @@ int main(int argc, char* argv[]){
         pthread_mutex_unlock(&(schInfo->lockTimer));
 
         // batch finished
-        if((tmpTimer) % tBatch == 0 && tmpTimer > 60 * 20){ // 10 minutes of warm-up
+        if((tmpTimer - (60 * 20)) % tBatch == 0){ // take into account the warm-up period
             
             storeBatchResultsInFile(schInfo, fOutput, batch, tBatch, iPrevJob);
             iPrevJob = getNumberOfJobsInQueue(&(schInfo->finishedJobs));

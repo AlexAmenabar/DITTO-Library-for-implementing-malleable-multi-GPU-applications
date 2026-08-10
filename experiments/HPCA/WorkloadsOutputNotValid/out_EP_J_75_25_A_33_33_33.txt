@@ -1,0 +1,665 @@
+BATCH=0
+[System]
+ - Throughput = 72
+ - Utilization = 59.671701
+ - Utilization per GPU = [64.098611 64.525000 60.883333 60.155556 61.312500 57.670833 63.344444 45.383333]
+ - Allocation area = 0.612326
+ - Allocation time per GPU = [0.644444 0.659722 0.631944 0.606944 0.636111 0.591667 0.651389 0.476389]
+ - PCIe throug. = 685746.105035
+ - PCIe throug. per GPU = [932801.520833 783328.593056 729588.209722 973625.808333 1016084.405556 971067.640278 26943.915278 52528.747222]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 275.024510
+ - Mean wait time = 1071.286950
+ - Job 0 execution time = 15.000527, wait time = 0.334528
+ - Job 1 execution time = 40.000633, wait time = 0.330534
+ - Job 2 execution time = 40.003419, wait time = 0.326031
+ - Job 3 execution time = 145.012141, wait time = 0.328655
+ - Job 4 execution time = 9.999189, wait time = 70.333233
+ - Job 5 execution time = 220.014288, wait time = 0.336650
+ - Job 6 execution time = 35.001270, wait time = 95.335352
+ - Job 7 execution time = 250.014791, wait time = 0.338017
+ - Job 8 execution time = 115.009939, wait time = 25.324652
+ - Job 9 execution time = 10.000712, wait time = 100.329583
+ - Job 10 execution time = 485.040883, wait time = 0.333079
+ - Job 11 execution time = 24.998761, wait time = 230.342028
+ - Job 12 execution time = 460.042091, wait time = 55.327208
+ - Job 13 execution time = 610.055787, wait time = 70.330876
+ - Job 14 execution time = 610.055415, wait time = 70.329554
+ - Job 15 execution time = 895.079698, wait time = 0.330518
+ - Job 16 execution time = 25.000051, wait time = 595.371227
+ - Job 17 execution time = 150.011797, wait time = 490.362539
+ - Job 18 execution time = 20.001374, wait time = 610.369580
+ - Job 19 execution time = 5.001464, wait time = 550.359716
+ - Job 20 execution time = 20.001645, wait time = 545.359316
+ - Job 21 execution time = 60.004826, wait time = 555.362347
+ - Job 22 execution time = 225.021067, wait time = 585.365444
+ - Job 23 execution time = 245.022500, wait time = 585.367103
+ - Job 24 execution time = 880.083287, wait time = 250.339564
+ - Job 25 execution time = 9.997001, wait time = 945.394895
+ - Job 26 execution time = 150.015405, wait time = 920.387567
+ - Job 27 execution time = 9.999302, wait time = 1030.397221
+ - Job 28 execution time = 445.040615, wait time = 900.386240
+ - Job 29 execution time = 365.032616, wait time = 1015.393079
+ - Job 30 execution time = 1775.158940, wait time = 10.320635
+ - Job 31 execution time = 1530.135536, wait time = 235.337995
+ - Job 32 execution time = 115.007671, wait time = 1355.421527
+ - Job 33 execution time = 50.003912, wait time = 1395.422334
+ - Job 34 execution time = 25.000529, wait time = 1445.425404
+ - Job 35 execution time = 255.017729, wait time = 1290.418601
+ - Job 36 execution time = 5.000172, wait time = 1440.422744
+ - Job 37 execution time = 15.002740, wait time = 1470.424726
+ - Job 38 execution time = 50.003752, wait time = 1420.419559
+ - Job 39 execution time = 115.011141, wait time = 1450.423490
+ - Job 40 execution time = 150.011810, wait time = 1470.424764
+ - Job 41 execution time = 120.010538, wait time = 1545.424095
+ - Job 42 execution time = 235.018284, wait time = 1460.421505
+ - Job 43 execution time = 5.000559, wait time = 1670.433148
+ - Job 44 execution time = 25.001849, wait time = 1665.431691
+ - Job 45 execution time = 60.005588, wait time = 1650.431494
+ - Job 46 execution time = 60.005683, wait time = 1665.431989
+ - Job 47 execution time = 60.005709, wait time = 1685.430539
+ - Job 48 execution time = 10.000717, wait time = 1735.433775
+ - Job 49 execution time = 2565.218774, wait time = 4.340958
+ - Job 50 execution time = 310.029330, wait time = 1540.423498
+ - Job 51 execution time = 1210.108473, wait time = 925.388217
+ - Job 52 execution time = 460.052076, wait time = 1485.421581
+ - Job 53 execution time = 245.030623, wait time = 1675.431355
+ - Job 54 execution time = 1795.169570, wait time = 545.358183
+ - Job 55 execution time = 14.996418, wait time = 1980.466167
+ - Job 56 execution time = 10.007873, wait time = 1985.460736
+ - Job 57 execution time = 14.996966, wait time = 1980.466315
+ - Job 58 execution time = 5.001317, wait time = 1975.460395
+ - Job 59 execution time = 35.005019, wait time = 1950.457923
+ - Job 60 execution time = 50.000803, wait time = 1980.461677
+ - Job 61 execution time = 290.027212, wait time = 1890.454946
+ - Job 62 execution time = 80.006385, wait time = 2020.460630
+ - Job 63 execution time = 610.060569, wait time = 1705.432567
+ - Job 64 execution time = 80.018025, wait time = 2125.463112
+ - Job 65 execution time = 225.022329, wait time = 2060.462949
+ - Job 66 execution time = 230.026083, wait time = 2040.460821
+ - Job 67 execution time = 34.999844, wait time = 2215.480752
+ - Job 68 execution time = 10.002580, wait time = 2210.475810
+ - Job 69 execution time = 4.994567, wait time = 2160.470660
+ - Job 70 execution time = 35.006031, wait time = 2130.459922
+ - Job 71 execution time = 250.018478, wait time = 2180.474853
+ - Reconfigurations = 3
+ - Expands = 3
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=1
+[System]
+ - Throughput = 27
+ - Utilization = 91.946528
+ - Utilization per GPU = [98.568056 97.530556 87.652778 84.138889 97.559722 97.372222 91.252778 81.497222]
+ - Allocation area = 0.933854
+ - Allocation time per GPU = [1.000000 0.983333 0.891667 0.854167 0.986111 0.994444 0.922222 0.838889]
+ - PCIe throug. = 694873.032639
+ - PCIe throug. per GPU = [3269786.368056 1319280.797222 2529201.831944 2968776.306944 5132530.268056 5186809.788889 1116347.359722 1931948.606944]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 536.714070
+ - Mean wait time = 3721.516055
+ - Job 72 execution time = 665.060427, wait time = 2220.476785
+ - Job 73 execution time = 600.049534, wait time = 2355.482295
+ - Job 74 execution time = 20.001467, wait time = 2880.521744
+ - Job 75 execution time = 225.012892, wait time = 2740.516477
+ - Job 76 execution time = 50.005071, wait time = 2890.521322
+ - Job 77 execution time = 1030.089873, wait time = 2145.469122
+ - Job 78 execution time = 230.010615, wait time = 3025.536831
+ - Job 79 execution time = 625.066754, wait time = 2885.517870
+ - Job 80 execution time = 305.035791, wait time = 3205.541476
+ - Job 81 execution time = 165.009938, wait time = 3505.575976
+ - Job 82 execution time = 1535.137254, wait time = 2715.513799
+ - Job 83 execution time = 330.021857, wait time = 4105.628728
+ - Job 84 execution time = 25.011204, wait time = 4420.648330
+ - Job 85 execution time = 115.013780, wait time = 4440.658244
+ - Job 86 execution time = 3285.294181, wait time = 1840.445067
+ - Job 87 execution time = 24.986353, wait time = 4550.670646
+ - Job 88 execution time = 44.999861, wait time = 4515.650317
+ - Job 89 execution time = 75.005293, wait time = 4520.648034
+ - Job 90 execution time = 245.018784, wait time = 4430.649350
+ - Job 91 execution time = 150.015056, wait time = 4520.648417
+ - Job 92 execution time = 1825.167031, wait time = 3225.543599
+ - Job 93 execution time = 490.050279, wait time = 4530.649611
+ - Job 94 execution time = 885.082337, wait time = 4545.647405
+ - Job 95 execution time = 520.040435, wait time = 4930.685583
+ - Job 96 execution time = 24.998524, wait time = 5375.718799
+ - Job 97 execution time = 950.083739, wait time = 4570.650050
+ - Job 98 execution time = 50.011553, wait time = 5385.717605
+ - Reconfigurations = 1
+ - Expands = 1
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=2
+[System]
+ - Throughput = 39
+ - Utilization = 84.004340
+ - Utilization per GPU = [97.640278 67.826389 98.477778 85.368056 75.897222 96.106944 69.340278 81.377778]
+ - Allocation area = 0.858160
+ - Allocation time per GPU = [0.995833 0.704167 1.000000 0.873611 0.773611 0.979167 0.712500 0.826389]
+ - PCIe throug. = 363400.683854
+ - PCIe throug. per GPU = [874646.772222 463982.619444 777876.183333 2126791.736111 829247.287500 2501627.380556 706180.313889 592085.533333]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 356.185444
+ - Mean wait time = 6593.758242
+ - Job 99 execution time = 370.039076, wait time = 5395.724611
+ - Job 100 execution time = 2595.240377, wait time = 3650.583157
+ - Job 101 execution time = 740.067667, wait time = 5405.719839
+ - Job 102 execution time = 320.028834, wait time = 6085.779116
+ - Job 103 execution time = 39.998504, wait time = 6320.801824
+ - Job 104 execution time = 44.999237, wait time = 6345.803558
+ - Job 105 execution time = 65.006895, wait time = 6390.805782
+ - Job 106 execution time = 40.003085, wait time = 6345.797958
+ - Job 107 execution time = 40.004409, wait time = 6340.795226
+ - Job 108 execution time = 40.003558, wait time = 6315.792738
+ - Job 109 execution time = 40.003815, wait time = 6315.791730
+ - Job 110 execution time = 120.012073, wait time = 6380.804704
+ - Job 111 execution time = 40.004334, wait time = 6280.785310
+ - Job 112 execution time = 95.008595, wait time = 6290.789090
+ - Job 113 execution time = 245.018890, wait time = 6360.805017
+ - Job 114 execution time = 20.001813, wait time = 6395.790365
+ - Job 115 execution time = 220.019698, wait time = 6275.784615
+ - Job 116 execution time = 230.020212, wait time = 6320.785655
+ - Job 117 execution time = 455.038460, wait time = 6525.800988
+ - Job 118 execution time = 670.057934, wait time = 6450.795259
+ - Job 119 execution time = 25.002645, wait time = 7100.849578
+ - Job 120 execution time = 10.000383, wait time = 7125.851335
+ - Job 121 execution time = 920.079989, wait time = 6300.786147
+ - Job 122 execution time = 110.008719, wait time = 7105.847942
+ - Job 123 execution time = 80.006105, wait time = 7110.847100
+ - Job 124 execution time = 150.013046, wait time = 7115.849024
+ - Job 125 execution time = 120.010475, wait time = 7135.848995
+ - Job 126 execution time = 9.999330, wait time = 7180.850173
+ - Job 127 execution time = 1130.099294, wait time = 6290.787165
+ - Job 128 execution time = 315.029326, wait time = 7150.843261
+ - Job 129 execution time = 45.003171, wait time = 7415.866731
+ - Job 130 execution time = 440.035737, wait time = 7150.848460
+ - Job 131 execution time = 115.009335, wait time = 7400.862959
+ - Job 132 execution time = 50.004130, wait time = 7465.867438
+ - Job 133 execution time = 50.004248, wait time = 7480.866503
+ - Job 134 execution time = 620.055084, wait time = 7120.840492
+ - Job 135 execution time = 1785.157910, wait time = 6295.784376
+ - Job 136 execution time = 460.043056, wait time = 7480.867235
+ - Job 137 execution time = 1025.092849, wait time = 7530.869965
+ - Reconfigurations = 2
+ - Expands = 2
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=3
+[System]
+ - Throughput = 25
+ - Utilization = 78.633507
+ - Utilization per GPU = [69.372222 68.150000 90.209722 65.840278 98.365278 97.101389 62.343056 77.686111]
+ - Allocation area = 0.797222
+ - Allocation time per GPU = [0.704167 0.693056 0.908333 0.665278 1.000000 0.983333 0.637500 0.786111]
+ - PCIe throug. = 132284.990799
+ - PCIe throug. per GPU = [38576.708333 1371638.113889 850563.298611 4611.002778 1305022.768056 1323464.594444 1281586.094444 848049.701389]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 777.668440
+ - Mean wait time = 9286.020846
+ - Job 138 execution time = 1525.140241, wait time = 7395.865070
+ - Job 139 execution time = 1535.148279, wait time = 7425.865324
+ - Job 140 execution time = 5.002860, wait time = 8850.996508
+ - Job 141 execution time = 2040.192163, wait time = 7165.849923
+ - Job 142 execution time = 225.027848, wait time = 8810.988308
+ - Job 143 execution time = 450.032214, wait time = 8830.996457
+ - Job 144 execution time = 325.018492, wait time = 8976.008406
+ - Job 145 execution time = 2560.232929, wait time = 7170.849099
+ - Job 146 execution time = 250.021138, wait time = 9251.020199
+ - Job 147 execution time = 1335.112933, wait time = 8525.959258
+ - Job 148 execution time = 60.007719, wait time = 9731.052637
+ - Job 149 execution time = 465.028942, wait time = 9406.035473
+ - Job 150 execution time = 885.067274, wait time = 9236.022699
+ - Job 151 execution time = 480.038454, wait time = 9766.057457
+ - Job 152 execution time = 220.019727, wait time = 10151.085821
+ - Job 153 execution time = 40.003345, wait time = 10346.101387
+ - Job 154 execution time = 380.034315, wait time = 10166.087080
+ - Job 155 execution time = 615.055540, wait time = 10001.073893
+ - Job 156 execution time = 495.039298, wait time = 10141.087551
+ - Job 157 execution time = 500.041144, wait time = 10141.087524
+ - Job 158 execution time = 35.003308, wait time = 10586.119085
+ - Job 159 execution time = 290.025525, wait time = 10536.117620
+ - Job 160 execution time = 370.033710, wait time = 10526.116828
+ - Job 161 execution time = 1795.159030, wait time = 9741.055270
+ - Job 162 execution time = 2560.224575, wait time = 9271.022278
+ - Reconfigurations = 0
+ - Expands = 0
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=4
+[System]
+ - Throughput = 40
+ - Utilization = 70.672569
+ - Utilization per GPU = [71.325000 67.819444 80.923611 67.043056 69.998611 75.616667 66.851389 65.802778]
+ - Allocation area = 0.734896
+ - Allocation time per GPU = [0.744444 0.713889 0.841667 0.688889 0.713889 0.770833 0.702778 0.702778]
+ - PCIe throug. = 339002.854167
+ - PCIe throug. per GPU = [1011602.786111 1095468.470833 1499537.888889 1785522.819444 1588351.783333 143146.084722 147142.768056 1406482.587500]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 333.529483
+ - Mean wait time = 13283.965271
+ - Job 163 execution time = 1525.141781, wait time = 10386.104001
+ - Job 164 execution time = 1820.170102, wait time = 10581.118555
+ - Job 165 execution time = 260.012170, wait time = 12371.285571
+ - Job 166 execution time = 9.997582, wait time = 12616.297817
+ - Job 167 execution time = 25.006691, wait time = 12621.296388
+ - Job 168 execution time = 115.017645, wait time = 12621.296305
+ - Job 169 execution time = 490.048198, wait time = 12616.297005
+ - Job 170 execution time = 260.013483, wait time = 13076.340864
+ - Job 171 execution time = 4.996563, wait time = 13281.351188
+ - Job 172 execution time = 10.000206, wait time = 13266.344412
+ - Job 173 execution time = 34.997240, wait time = 13271.351042
+ - Job 174 execution time = 40.001069, wait time = 13311.353208
+ - Job 175 execution time = 65.006553, wait time = 13301.352022
+ - Job 176 execution time = 95.007877, wait time = 13326.352501
+ - Job 177 execution time = 10.000445, wait time = 13301.341926
+ - Job 178 execution time = 60.005564, wait time = 13316.343643
+ - Job 179 execution time = 125.006696, wait time = 13296.347975
+ - Job 180 execution time = 40.003116, wait time = 13326.342033
+ - Job 181 execution time = 25.002281, wait time = 13356.342710
+ - Job 182 execution time = 25.003568, wait time = 13371.343136
+ - Job 183 execution time = 60.003582, wait time = 13321.338652
+ - Job 184 execution time = 60.003989, wait time = 13346.339309
+ - Job 185 execution time = 60.004408, wait time = 13376.340300
+ - Job 186 execution time = 245.022511, wait time = 13296.340380
+ - Job 187 execution time = 20.002908, wait time = 13426.342068
+ - Job 188 execution time = 25.001446, wait time = 13416.341345
+ - Job 189 execution time = 15.001266, wait time = 13401.336894
+ - Job 190 execution time = 220.019926, wait time = 13361.344727
+ - Job 191 execution time = 1030.103893, wait time = 13251.341551
+ - Job 192 execution time = 1160.101898, wait time = 13351.340781
+ - Job 193 execution time = 9.996748, wait time = 14371.423267
+ - Job 194 execution time = 80.004403, wait time = 14381.421905
+ - Job 195 execution time = 115.003004, wait time = 14366.422454
+ - Job 196 execution time = 1210.105164, wait time = 13396.340769
+ - Job 197 execution time = 1535.136521, wait time = 13331.353067
+ - Job 198 execution time = 220.018763, wait time = 14356.415760
+ - Job 199 execution time = 310.029611, wait time = 14406.416623
+ - Job 200 execution time = 370.039633, wait time = 14396.415597
+ - Job 201 execution time = 1535.140116, wait time = 13401.338649
+ - Job 202 execution time = 20.000702, wait time = 14786.454455
+ - Reconfigurations = 4
+ - Expands = 4
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=5
+[System]
+ - Throughput = 50
+ - Utilization = 64.593056
+ - Utilization per GPU = [77.177778 68.143056 54.281944 56.248611 81.223611 75.668056 61.331944 42.669444]
+ - Allocation area = 0.672917
+ - Allocation time per GPU = [0.834722 0.706944 0.576389 0.590278 0.830556 0.770833 0.630556 0.443056]
+ - PCIe throug. = 325710.484375
+ - PCIe throug. per GPU = [1072575.427778 1205140.563889 2619248.223611 2871300.915278 602089.961111 5737.090278 9001.900000 185822.148611]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 274.023849
+ - Mean wait time = 16034.239947
+ - Job 203 execution time = 540.044395, wait time = 14441.420436
+ - Job 204 execution time = 50.006582, wait time = 14906.454510
+ - Job 205 execution time = 60.008139, wait time = 14916.455348
+ - Job 206 execution time = 15.001308, wait time = 14911.455056
+ - Job 207 execution time = 230.015593, wait time = 14786.452818
+ - Job 208 execution time = 80.006819, wait time = 14886.453390
+ - Job 209 execution time = 9.999497, wait time = 14856.445696
+ - Job 210 execution time = 85.008256, wait time = 14876.447587
+ - Job 211 execution time = 890.078634, wait time = 14376.421425
+ - Job 212 execution time = 14.999449, wait time = 14941.451483
+ - Job 213 execution time = 155.013292, wait time = 14876.449270
+ - Job 214 execution time = 15.001822, wait time = 14956.450210
+ - Job 215 execution time = 365.035238, wait time = 14846.442147
+ - Job 216 execution time = 575.053048, wait time = 14901.453040
+ - Job 217 execution time = 160.011776, wait time = 15366.488046
+ - Job 218 execution time = 150.014315, wait time = 15506.497026
+ - Job 219 execution time = 155.013228, wait time = 15476.493869
+ - Job 220 execution time = 1535.131297, wait time = 14766.451106
+ - Job 221 execution time = 425.038359, wait time = 15616.504837
+ - Job 222 execution time = 2060.192275, wait time = 14511.424736
+ - Job 223 execution time = 1755.166615, wait time = 14946.449323
+ - Job 224 execution time = 9.991549, wait time = 16601.601535
+ - Job 225 execution time = 40.004227, wait time = 16581.589097
+ - Job 226 execution time = 65.008164, wait time = 16601.591301
+ - Job 227 execution time = 70.003778, wait time = 16556.588911
+ - Job 228 execution time = 150.009293, wait time = 16556.588860
+ - Job 229 execution time = 10.000334, wait time = 16626.586803
+ - Job 230 execution time = 380.031189, wait time = 16586.586249
+ - Job 231 execution time = 310.027025, wait time = 16626.585333
+ - Job 232 execution time = 50.003901, wait time = 16896.607401
+ - Job 233 execution time = 50.003296, wait time = 16881.605953
+ - Job 234 execution time = 515.038685, wait time = 16531.587769
+ - Job 235 execution time = 20.002420, wait time = 16901.605153
+ - Job 236 execution time = 4.999943, wait time = 16891.604784
+ - Job 237 execution time = 25.001159, wait time = 16846.603346
+ - Job 238 execution time = 600.052170, wait time = 16566.584111
+ - Job 239 execution time = 4.999924, wait time = 16956.609000
+ - Job 240 execution time = 25.001441, wait time = 16921.605032
+ - Job 241 execution time = 40.005453, wait time = 16951.607519
+ - Job 242 execution time = 225.019316, wait time = 16876.603549
+ - Job 243 execution time = 24.999594, wait time = 16951.608048
+ - Job 244 execution time = 155.012300, wait time = 16936.603299
+ - Job 245 execution time = 165.013838, wait time = 16951.604775
+ - Job 246 execution time = 465.040658, wait time = 16886.605726
+ - Job 247 execution time = 15.001614, wait time = 17071.611393
+ - Job 248 execution time = 65.006239, wait time = 17081.614110
+ - Job 249 execution time = 90.008584, wait time = 17066.612755
+ - Job 250 execution time = 175.017276, wait time = 17071.610980
+ - Job 251 execution time = 610.053010, wait time = 16831.596956
+ - Job 252 execution time = 14.996111, wait time = 17231.626225
+ - Reconfigurations = 3
+ - Expands = 3
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=6
+[System]
+ - Throughput = 43
+ - Utilization = 65.779167
+ - Utilization per GPU = [96.312500 69.013889 68.861111 60.259722 68.969444 52.623611 63.469444 46.723611]
+ - Allocation area = 0.686111
+ - Allocation time per GPU = [0.983333 0.723611 0.708333 0.636111 0.716667 0.556944 0.665278 0.498611]
+ - PCIe throug. = 287630.252778
+ - PCIe throug. per GPU = [890426.781944 1015606.447222 877640.100000 768416.156944 1544389.797222 1539876.075000 628848.719444 1001070.300000]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 244.439562
+ - Mean wait time = 19245.857239
+ - Job 253 execution time = 1205.114214, wait time = 17231.622355
+ - Job 254 execution time = 54.996871, wait time = 18421.734472
+ - Job 255 execution time = 10.004118, wait time = 18456.728960
+ - Job 256 execution time = 40.001296, wait time = 18441.730094
+ - Job 257 execution time = 34.999557, wait time = 18441.729572
+ - Job 258 execution time = 310.033152, wait time = 18466.729850
+ - Job 259 execution time = 330.034010, wait time = 18441.726433
+ - Job 260 execution time = 215.011162, wait time = 18751.758091
+ - Job 261 execution time = 10.000385, wait time = 18931.765904
+ - Job 262 execution time = 14.998815, wait time = 18921.767290
+ - Job 263 execution time = 5.001004, wait time = 18916.763829
+ - Job 264 execution time = 210.017190, wait time = 18891.761143
+ - Job 265 execution time = 225.018389, wait time = 18916.763765
+ - Job 266 execution time = 60.009550, wait time = 19056.773167
+ - Job 267 execution time = 365.033401, wait time = 18866.759143
+ - Job 268 execution time = 10.002125, wait time = 19176.785477
+ - Job 269 execution time = 450.043931, wait time = 18926.767685
+ - Job 270 execution time = 155.014239, wait time = 19186.786897
+ - Job 271 execution time = 450.039848, wait time = 19101.780696
+ - Job 272 execution time = 14.997313, wait time = 19506.814672
+ - Job 273 execution time = 24.994976, wait time = 19471.814401
+ - Job 274 execution time = 95.007892, wait time = 19436.804703
+ - Job 275 execution time = 120.010610, wait time = 19456.803937
+ - Job 276 execution time = 29.998713, wait time = 19506.809881
+ - Job 277 execution time = 155.011611, wait time = 19481.812543
+ - Job 278 execution time = 20.002061, wait time = 19501.804168
+ - Job 279 execution time = 155.014896, wait time = 19476.805820
+ - Job 280 execution time = 115.011341, wait time = 19506.804713
+ - Job 281 execution time = 1030.093815, wait time = 18951.767341
+ - Job 282 execution time = 200.016208, wait time = 19456.798150
+ - Job 283 execution time = 305.022645, wait time = 19491.804775
+ - Job 284 execution time = 115.010267, wait time = 19596.807744
+ - Job 285 execution time = 220.019834, wait time = 19671.811465
+ - Job 286 execution time = 295.024821, wait time = 19666.812645
+ - Job 287 execution time = 890.078851, wait time = 19531.808481
+ - Job 288 execution time = 14.997109, wait time = 20181.857504
+ - Job 289 execution time = 25.000036, wait time = 20166.853525
+ - Job 290 execution time = 1025.088595, wait time = 19471.800482
+ - Job 291 execution time = 20.000347, wait time = 20281.861420
+ - Job 292 execution time = 185.016096, wait time = 20166.851374
+ - Job 293 execution time = 25.001912, wait time = 20271.856009
+ - Job 294 execution time = 80.005686, wait time = 20271.858163
+ - Job 295 execution time = 1195.102267, wait time = 19496.802545
+ - Reconfigurations = 3
+ - Expands = 3
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=7
+[System]
+ - Throughput = 28
+ - Utilization = 83.455729
+ - Utilization per GPU = [98.386111 92.483333 99.219444 92.920833 79.734722 75.851389 74.633333 54.416667]
+ - Allocation area = 0.851042
+ - Allocation time per GPU = [1.000000 0.945833 1.000000 0.948611 0.811111 0.770833 0.770833 0.561111]
+ - PCIe throug. = 499420.982986
+ - PCIe throug. per GPU = [3856847.912500 3869054.748611 2233514.495833 3849308.650000 3257471.848611 734507.705556 1609201.569444 2481158.000000]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 491.471656
+ - Mean wait time = 21644.109723
+ - Job 296 execution time = 445.036247, wait time = 20151.852575
+ - Job 297 execution time = 245.021161, wait time = 20316.858550
+ - Job 298 execution time = 310.028926, wait time = 20286.856324
+ - Job 299 execution time = 1210.105134, wait time = 19616.809447
+ - Job 300 execution time = 50.004360, wait time = 20551.877476
+ - Job 301 execution time = 80.004773, wait time = 20551.879173
+ - Job 302 execution time = 1535.136737, wait time = 19561.806041
+ - Job 303 execution time = 635.059954, wait time = 20496.874724
+ - Job 304 execution time = 850.075030, wait time = 20776.899814
+ - Job 305 execution time = 120.015069, wait time = 21571.970772
+ - Job 306 execution time = 245.030797, wait time = 21586.969680
+ - Job 307 execution time = 1815.172410, wait time = 20271.858286
+ - Job 308 execution time = 150.007898, wait time = 21816.997262
+ - Job 309 execution time = 225.013801, wait time = 21906.997209
+ - Job 310 execution time = 230.016672, wait time = 21921.999087
+ - Job 311 execution time = 60.006202, wait time = 22112.008298
+ - Job 312 execution time = 370.025139, wait time = 21902.002417
+ - Job 313 execution time = 115.008509, wait time = 22092.007819
+ - Job 314 execution time = 2545.227940, wait time = 20171.851803
+ - Job 315 execution time = 1625.118085, wait time = 21601.971444
+ - Job 316 execution time = 40.010049, wait time = 23057.066788
+ - Job 317 execution time = 110.019078, wait time = 23062.066005
+ - Job 318 execution time = 230.025698, wait time = 23037.066167
+ - Job 319 execution time = 14.995571, wait time = 23257.090358
+ - Job 320 execution time = 440.037961, wait time = 23272.085305
+ - Job 321 execution time = 4.994180, wait time = 23707.122271
+ - Job 322 execution time = 45.007382, wait time = 23682.112712
+ - Job 323 execution time = 15.001606, wait time = 23692.114429
+ - Reconfigurations = 1
+ - Expands = 1
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=8
+[System]
+ - Throughput = 43
+ - Utilization = 67.261632
+ - Utilization per GPU = [63.751389 70.805556 64.608333 67.712500 70.258333 87.977778 57.818056 55.161111]
+ - Allocation area = 0.692535
+ - Allocation time per GPU = [0.662500 0.723611 0.666667 0.697222 0.730556 0.890278 0.600000 0.569444]
+ - PCIe throug. = 422361.806076
+ - PCIe throug. per GPU = [1939563.283333 1770249.191667 1988833.694444 1740821.379167 560051.376389 432130.872222 840053.283333 72423.723611]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 242.110867
+ - Mean wait time = 25028.580596
+ - Job 324 execution time = 110.010122, wait time = 23692.114091
+ - Job 325 execution time = 245.021777, wait time = 23672.112522
+ - Job 326 execution time = 185.013785, wait time = 23702.114788
+ - Job 327 execution time = 615.048144, wait time = 23697.115252
+ - Job 328 execution time = 45.000119, wait time = 24297.159334
+ - Job 329 execution time = 95.008302, wait time = 24292.154290
+ - Job 330 execution time = 150.012143, wait time = 24322.156625
+ - Job 331 execution time = 155.012014, wait time = 24302.154067
+ - Job 332 execution time = 9.999442, wait time = 24412.159350
+ - Job 333 execution time = 15.001173, wait time = 24372.153649
+ - Job 334 execution time = 95.005980, wait time = 24387.161851
+ - Job 335 execution time = 100.005373, wait time = 24372.152502
+ - Job 336 execution time = 1690.133275, wait time = 23067.066777
+ - Job 337 execution time = 4.995839, wait time = 24427.150169
+ - Job 338 execution time = 9.996415, wait time = 24467.153334
+ - Job 339 execution time = 15.002957, wait time = 24417.141362
+ - Job 340 execution time = 15.002200, wait time = 24407.140163
+ - Job 341 execution time = 890.065163, wait time = 24392.156145
+ - Job 342 execution time = 1020.079260, wait time = 24447.150967
+ - Job 343 execution time = 9.990970, wait time = 25402.220303
+ - Job 344 execution time = 14.995716, wait time = 25337.208147
+ - Job 345 execution time = 35.000623, wait time = 25342.205823
+ - Job 346 execution time = 65.004076, wait time = 25367.208376
+ - Job 347 execution time = 160.017516, wait time = 25402.209575
+ - Job 348 execution time = 19.998392, wait time = 25477.213125
+ - Job 349 execution time = 235.018515, wait time = 25347.202478
+ - Job 350 execution time = 4.999843, wait time = 25492.207387
+ - Job 351 execution time = 60.003771, wait time = 25472.203214
+ - Job 352 execution time = 230.016531, wait time = 25427.202538
+ - Job 353 execution time = 615.048014, wait time = 25387.208058
+ - Job 354 execution time = 225.016759, wait time = 25582.206363
+ - Job 355 execution time = 25.001729, wait time = 25787.219586
+ - Job 356 execution time = 90.007121, wait time = 25782.220505
+ - Job 357 execution time = 615.046807, wait time = 25452.205161
+ - Job 358 execution time = 595.043956, wait time = 25507.203699
+ - Job 359 execution time = 115.007890, wait time = 25912.226122
+ - Job 360 execution time = 225.018213, wait time = 25837.221647
+ - Job 361 execution time = 880.064352, wait time = 25492.207031
+ - Job 362 execution time = 215.013348, wait time = 26207.245338
+ - Job 363 execution time = 230.018194, wait time = 26417.257412
+ - Job 364 execution time = 235.018119, wait time = 26417.256958
+ - Job 365 execution time = 15.001063, wait time = 26622.270811
+ - Job 366 execution time = 30.002302, wait time = 26612.268732
+ - Reconfigurations = 1
+ - Expands = 1
+ - Shrinks = 0
+ - Keeps = 0
+
+
+BATCH=9
+[System]
+ - Throughput = 67
+ - Utilization = 87.059028
+ - Utilization per GPU = [85.622222 85.822222 89.125000 94.855556 83.823611 74.975000 85.431944 96.816667]
+ - Allocation area = 0.895312
+ - Allocation time per GPU = [0.888889 0.893056 0.922222 0.970833 0.865278 0.772222 0.872222 0.977778]
+ - PCIe throug. = 14440.152604
+ - PCIe throug. per GPU = [1807515.034722 2051786.151389 3934228.258333 905162.750000 1295242.026389 880816.681944 908410.111111 262824.918056]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 337.263171
+ - Mean wait time = 27823.592574
+ - Job 367 execution time = 1540.111592, wait time = 25447.209612
+ - Job 368 execution time = 390.029810, wait time = 26592.264757
+ - Job 369 execution time = 1210.088473, wait time = 25897.224322
+ - Job 370 execution time = 35.001580, wait time = 26962.291677
+ - Job 371 execution time = 45.003164, wait time = 26967.292242
+ - Job 372 execution time = 30.002645, wait time = 26982.290859
+ - Job 373 execution time = 80.005193, wait time = 26967.287462
+ - Job 374 execution time = 80.005347, wait time = 26962.285902
+ - Job 375 execution time = 10.000900, wait time = 27012.287845
+ - Job 376 execution time = 1805.132898, wait time = 25502.202772
+ - Job 377 execution time = 110.006170, wait time = 26967.288528
+ - Job 378 execution time = 19.999483, wait time = 27002.286725
+ - Job 379 execution time = 40.002323, wait time = 27012.284462
+ - Job 380 execution time = 895.066791, wait time = 26397.256199
+ - Job 381 execution time = 34.999587, wait time = 27062.285374
+ - Job 382 execution time = 35.003559, wait time = 27067.281012
+ - Job 383 execution time = 230.018454, wait time = 27002.283035
+ - Job 384 execution time = 2050.152020, wait time = 25807.219920
+ - Job 385 execution time = 610.048244, wait time = 27017.281608
+ - Job 386 execution time = 645.053849, wait time = 27007.280454
+ - Job 387 execution time = 40.004932, wait time = 27562.321555
+ - Job 388 execution time = 150.010260, wait time = 27587.324369
+ - Job 389 execution time = 1525.120629, wait time = 26607.267807
+ - Job 390 execution time = 155.008767, wait time = 27737.333818
+ - Job 391 execution time = 165.007534, wait time = 27817.339857
+ - Job 392 execution time = 10.002757, wait time = 27962.343911
+ - Job 393 execution time = 4.998118, wait time = 27952.343385
+ - Job 394 execution time = 50.006047, wait time = 27957.343340
+ - Job 395 execution time = 790.057216, wait time = 27532.316417
+ - Job 396 execution time = 14.999384, wait time = 28197.353748
+ - Job 397 execution time = 10.001567, wait time = 28182.348572
+ - Job 398 execution time = 14.997760, wait time = 28152.347938
+ - Job 399 execution time = 60.002523, wait time = 28187.352204
+ - Job 400 execution time = 80.003161, wait time = 28117.338632
+ - Job 401 execution time = 115.007109, wait time = 28147.342106
+ - Job 402 execution time = 445.029732, wait time = 27942.339207
+ - Job 403 execution time = 115.008012, wait time = 28137.337956
+ - Job 404 execution time = 605.040437, wait time = 27862.338289
+ - Job 405 execution time = 35.001839, wait time = 28217.340681
+ - Job 406 execution time = 225.016659, wait time = 28142.342703
+ - Job 407 execution time = 10.000114, wait time = 28192.334512
+ - Job 408 execution time = 55.003329, wait time = 28222.338954
+ - Job 409 execution time = 325.022382, wait time = 28187.339684
+ - Job 410 execution time = 610.047531, wait time = 28182.348141
+ - Job 411 execution time = 24.997896, wait time = 28517.357480
+ - Job 412 execution time = 65.003473, wait time = 28492.350588
+ - Job 413 execution time = 490.036359, wait time = 28207.332907
+ - Job 414 execution time = 900.065729, wait time = 28197.336121
+ - Job 415 execution time = 490.030847, wait time = 28477.350241
+ - Job 416 execution time = 500.036125, wait time = 28527.353246
+ - Job 417 execution time = 450.029928, wait time = 28512.349195
+ - Job 418 execution time = 10.000386, wait time = 28892.370366
+ - Job 419 execution time = 50.004109, wait time = 28897.373255
+ - Job 420 execution time = 65.001188, wait time = 28917.378159
+ - Job 421 execution time = 9.999624, wait time = 28902.371433
+ - Job 422 execution time = 10.000436, wait time = 28867.364984
+ - Job 423 execution time = 80.006133, wait time = 28887.372341
+ - Job 424 execution time = 2550.188340, wait time = 27057.279522
+ - Job 425 execution time = 80.007086, wait time = 28847.362373
+ - Job 426 execution time = 10.000257, wait time = 28887.363755
+ - Job 427 execution time = 165.014197, wait time = 28877.366997
+ - Job 428 execution time = 110.006425, wait time = 28882.365677
+ - Job 429 execution time = 225.016875, wait time = 28902.369007
+ - Job 430 execution time = 120.008456, wait time = 28992.366055
+ - Job 431 execution time = 245.014824, wait time = 28947.365532
+ - Job 432 execution time = 120.009573, wait time = 29092.371700
+ - Job 433 execution time = 320.024288, wait time = 28977.368974
+ - Reconfigurations = 2
+ - Expands = 2
+ - Shrinks = 0
+ - Keeps = 0
+
+
+Final results
+[System]
+ - Throughput = 43.400000
+ - Utilization = 75.307726
+ - Utilization per GPU = [82.225417 75.211944 79.424306 73.454306 78.714306 79.096389 69.581667 64.753472]
+ - Allocation area = 0.773437
+ - Allocation time per GPU = [0.845833 0.774722 0.814722 0.753194 0.806389 0.808056 0.716528 0.668056]
+ - PCIe throug. = 376487.134531
+ - PCIe throug. per GPU = [1569434.259583 1494553.569722 1804023.218472 1799433.752500 1713048.152222 1371918.391389 727371.603472 883439.426667]
+ - NVLink band. = 0.000000
+ - NVLink band. per GPU = [0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+[Jobs]
+ - Mean execution time = 386.843105
+ - Mean wait time = 14373.292744
+ - Reconfigurations = 20.000000
+ - Expands = 20.000000
+ - Shrinks = 0.000000
+ - Keeps = 0.000000
+
+
