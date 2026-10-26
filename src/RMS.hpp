@@ -224,7 +224,8 @@ struct schInfo_t {
     double (*gpuPower) [JOB_MONITOR_STEPS];
     unsigned int (*gpuTemperature) [JOB_MONITOR_STEPS];
     unsigned int (*gpuPCIeThroughput) [JOB_MONITOR_STEPS];
-    unsigned int (*gpuNVLinkThroughput) [JOB_MONITOR_STEPS];
+    uint64_t (*gpuNVLinkThroughput) [JOB_MONITOR_STEPS];
+    uint64_t* gpuAccNVLink;
 
     size_t nMonitored;
     size_t monitorIndex;

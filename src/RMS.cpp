@@ -953,7 +953,8 @@ void initResourceMonitor(schInfo_t *schInfo, size_t nBatches){
     schInfo->gpuPower = (double (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuPower));
     schInfo->gpuTemperature = (unsigned int (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuTemperature));
     schInfo->gpuPCIeThroughput = (unsigned int (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuPCIeThroughput));
-    schInfo->gpuNVLinkThroughput = (unsigned int (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuNVLinkThroughput));
+    schInfo->gpuNVLinkThroughput = (uint64_t (*)[JOB_MONITOR_STEPS])calloc(device_count, sizeof(*schInfo->gpuNVLinkThroughput));
+    schInfo->gpuAccNVLink = (uint64_t*)calloc(device_count, sizeof(uint64_t));
     
     schInfo->nMonitored = 0;
     schInfo->monitorIndex = 0;
@@ -1152,6 +1153,7 @@ void stepResourceMonitor(schInfo_t *schInfo){
                 }
 
                 // NVLink: update total data
+                //schInfo->gpuAccNVLink[i] += rxCounter + txCounter;
                 schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex] += rxCounter + txCounter;
             }
         }
@@ -1160,9 +1162,15 @@ void stepResourceMonitor(schInfo_t *schInfo){
             
             // compute throughput
             size_t index1 = schInfo->monitorIndex;
-            size_t index2 = schInfo->monitorIndex > 0 ? schInfo->monitorIndex - 1 : JOB_MONITOR_STEPS - 1; 
+            //size_t index2 = schInfo->monitorIndex > 0 ? schInfo->monitorIndex - 1 : JOB_MONITOR_STEPS - 1; 
 
-            schInfo->gpuNVLinkThroughput[i][index1] = schInfo->gpuNVLinkThroughput[i][index1] - schInfo->gpuNVLinkThroughput[i][index2]; // KB/s
+            schInfo->gpuNVLinkThroughput[i][index1] = schInfo->gpuNVLinkThroughput[i][index1] - schInfo->gpuAccNVLink[i]; // KB/s
+            schInfo->gpuAccNVLink[i] += schInfo->gpuNVLinkThroughput[i][index1];
+        }
+        else{
+
+            size_t index1 = schInfo->monitorIndex;
+            schInfo->gpuAccNVLink[i] = schInfo->gpuNVLinkThroughput[i][index1];
         }
            
 
@@ -1182,8 +1190,8 @@ void stepResourceMonitor(schInfo_t *schInfo){
         schInfo->totalThroughputPCIe += (uint64_t)tx_throughput + rx_throughput; // accumulate throughput
         schInfo->totalThroughputPCIePerGPU[i] += (uint64_t)tx_throughput + rx_throughput;
 
-        schInfo->totalThroughputNVLink += (uint64_t)schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
-        schInfo->totalThroughputNVLinkPerGPU[i] += (uint64_t)schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
+        schInfo->totalThroughputNVLink += schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
+        schInfo->totalThroughputNVLinkPerGPU[i] += schInfo->gpuNVLinkThroughput[i][schInfo->monitorIndex];
     }
 
     fflush(fUsage);  // ensure data is written
@@ -1205,7 +1213,9 @@ void reinitMonitorAcc(schInfo_t *schInfo){
     schInfo->totalThroughputNVLink = 0;
     schInfo->nReconfigurations = 0;
     schInfo->nExpands = 0;
+    schInfo->nExpandsTopo = 0;
     schInfo->nShrinks = 0;
+    schInfo->nShrinksTopo = 0;
     schInfo->nKeeps = 0;
 
     for(size_t i = 0; i<schInfo->nGPUs; i++){
