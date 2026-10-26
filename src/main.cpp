@@ -3959,24 +3959,24 @@ int main(int argc, char* argv[]){
 
 #ifdef RECONFEXP
     
-    printf("\n\n\n[EXPAND]\n");
-    fflush(stdout);
-    reconfExpandEval(schInfo, schInfo->nGPUs);
+    //printf("\n\n\n[EXPAND]\n");
+    //fflush(stdout);
+    //reconfExpandEval(schInfo, schInfo->nGPUs);
 
     printf("\n\n\n[EXPAND DIFF]\n");
     fflush(stdout);
-    reconfExpandEval2(schInfo, 4);
+    reconfExpandEval2(schInfo, schInfo->nGPUs);
 
-    printf("\n\n\n[SHRINK]\n");
-    fflush(stdout);
-    reconfShrinkEval(schInfo, schInfo->nGPUs);
+    //printf("\n\n\n[SHRINK]\n");
+    //fflush(stdout);
+    //reconfShrinkEval(schInfo, schInfo->nGPUs);
 
     printf("\n\n[SHRINK DIFF]\n");
     fflush(stdout);
-    reconfShrinkEval2(schInfo, 4);
+    reconfShrinkEval2(schInfo, schInfo->nGPUs);
 
     // EXECUTE AFTER THIS
-    printf("\n\n[KEEP DIFF]\n");
+    /*printf("\n\n[KEEP DIFF]\n");
     fflush(stdout);
     reconfKeepEval2(schInfo, 8);
 
@@ -3991,7 +3991,7 @@ int main(int argc, char* argv[]){
 
     printf("\n\n\n[KEEP TOPO]\n");
     fflush(stdout);
-    reconfKeepEvalTopologyAware(schInfo, 4);
+    reconfKeepEvalTopologyAware(schInfo, 4);*/
 
 
 #elif NCCLEXP
