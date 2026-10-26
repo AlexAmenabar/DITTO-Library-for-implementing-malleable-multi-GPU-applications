@@ -1255,7 +1255,7 @@ int reconfExpandEval(schInfo_t *schInfo, size_t nGPUs){
     size_t minN = (size_t)16 * (size_t)1024 * (size_t)1024 * (size_t)1024 / (size_t)4;
     size_t maxN = (size_t)20 * (size_t)1024 * (size_t)1024 * (size_t)1024 / (size_t)4; // 20GB
 
-    size_t nN = 3;
+    size_t nN = 9;
     size_t arrayN[9] = {(size_t)1048576, (size_t)1048576 * (size_t)4, (size_t)1048576 * (size_t)16, (size_t)1048576 * (size_t)64, (size_t)1048576 * (size_t)256, (size_t)1048576 * (size_t)1024, (size_t)1048576 * (size_t)2048, (size_t)1048576 * (size_t)4096, (size_t)1048576 * (size_t)8192};
 
     // n partitions
@@ -1385,7 +1385,7 @@ int reconfExpandEval2(schInfo_t *schInfo, size_t nGPUs){
     size_t minN = (size_t)1024 * (size_t)1024 / (size_t)4;
     size_t maxN = (size_t)20 * (size_t)1024 * (size_t)1024 * (size_t)1024 / (size_t)4; // 20GB
 
-    size_t nN = 3;
+    size_t nN = 9;
     size_t arrayN[9] = {(size_t)1048576, (size_t)1048576 * (size_t)4, (size_t)1048576 * (size_t)16, (size_t)1048576 * (size_t)64, (size_t)1048576 * (size_t)256, (size_t)1048576 * (size_t)1024, (size_t)1048576 * (size_t)2048, (size_t)1048576 * (size_t)4096, (size_t)1048576 * (size_t)8192};
 
 
@@ -1516,7 +1516,7 @@ int reconfShrinkEval(schInfo_t *schInfo, size_t nGPUs){
     size_t minN = (size_t)1024 * (size_t)1024 / (size_t)4;
     size_t maxN = (size_t)20 * (size_t)1024 * (size_t)1024 * (size_t)1024 / (size_t)4; // 20GB
 
-    size_t nN = 3;
+    size_t nN = 9;
     size_t arrayN[9] = {(size_t)1048576, (size_t)1048576 * (size_t)4, (size_t)1048576 * (size_t)16, (size_t)1048576 * (size_t)64, (size_t)1048576 * (size_t)256, (size_t)1048576 * (size_t)1024, (size_t)1048576 * (size_t)2048, (size_t)1048576 * (size_t)4096, (size_t)1048576 * (size_t)8192};
 
 
@@ -1646,7 +1646,7 @@ int reconfShrinkEval2(schInfo_t *schInfo, size_t nGPUs){
     size_t minN = (size_t)1024 * (size_t)1024 / (size_t)4;
     size_t maxN = (size_t)20 * (size_t)1024 * (size_t)1024 * (size_t)1024 / (size_t)4; // 20GB
 
-    size_t nN = 3;
+    size_t nN = 9;
     size_t arrayN[9] = {(size_t)1048576, (size_t)1048576 * (size_t)4, (size_t)1048576 * (size_t)16, (size_t)1048576 * (size_t)64, (size_t)1048576 * (size_t)256, (size_t)1048576 * (size_t)1024, (size_t)1048576 * (size_t)2048, (size_t)1048576 * (size_t)4096, (size_t)1048576 * (size_t)8192};
 
 
@@ -1778,7 +1778,7 @@ int reconfKeepEval(schInfo_t *schInfo, size_t nGPUs){
     size_t minN = (size_t)1024 * (size_t)1024 / (size_t)4;
     size_t maxN = (size_t)20 * (size_t)1024 * (size_t)1024 * (size_t)1024 / (size_t)4; // 20GB
 
-    size_t nN = 3;
+    size_t nN = 9;
     size_t arrayN[9] = {(size_t)1048576, (size_t)1048576 * (size_t)4, (size_t)1048576 * (size_t)16, (size_t)1048576 * (size_t)64, (size_t)1048576 * (size_t)256, (size_t)1048576 * (size_t)1024, (size_t)1048576 * (size_t)2048, (size_t)1048576 * (size_t)4096, (size_t)1048576 * (size_t)8192};
 
 
@@ -1905,7 +1905,7 @@ int reconfKeepEval2(schInfo_t *schInfo, size_t nGPUs){
     size_t minN = (size_t)1024 * (size_t)1024 / (size_t)4;
     size_t maxN = (size_t)20 * (size_t)1024 * (size_t)1024 * (size_t)1024 / (size_t)4; // 20GB
 
-    size_t nN = 3;
+    size_t nN = 9;
     size_t arrayN[9] = {(size_t)1048576, (size_t)1048576 * (size_t)4, (size_t)1048576 * (size_t)16, (size_t)1048576 * (size_t)64, (size_t)1048576 * (size_t)256, (size_t)1048576 * (size_t)1024, (size_t)1048576 * (size_t)2048, (size_t)1048576 * (size_t)4096, (size_t)1048576 * (size_t)8192};
 
 
