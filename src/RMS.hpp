@@ -256,7 +256,9 @@ struct schInfo_t {
     // number of reconfigurations
     unsigned int nReconfigurations;
     unsigned int nExpands;
+    unsigned int nExpandsTopo;
     unsigned int nShrinks;
+    unsigned int nShrinksTopo;
     unsigned int nKeeps;
 
 
@@ -283,7 +285,9 @@ struct schInfo_t {
     // number of reconfiugration
     double *finalNReconfigurations;
     double *finalNExpands;
+    double *finalNExpandsTopo;
     double *finalNShrinks;
+    double *finalNShrinksTopo;
     double *finalNKeeps;
     // job execution and wait time
     double *finalMeanExecutionTime;

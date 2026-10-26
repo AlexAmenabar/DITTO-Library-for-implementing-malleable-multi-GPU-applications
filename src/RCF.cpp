@@ -610,13 +610,14 @@ void topology(schInfo_t *schInfo){
 
                                 deallocateJobResourcesStruct(&(topoJobResources));
                                 scheduleReconfiguration(schInfo, job, iJob, reconfJobResources);
+                                schInfo->nShrinks ++;
                             }
                             else{
                                 scheduleReconfiguration(schInfo, job, iJob, topoJobResources);
-                                schInfo->nKeeps++;
+                                schInfo->nShrinksTopo++;
                             }
 
-                            schInfo->nShrinks ++;
+                            
 
                             // job reconfigured
                             jobReconfigured = 1;
@@ -700,12 +701,12 @@ void topology(schInfo_t *schInfo){
 
                                 deallocateJobResourcesStruct(&(topoJobResources));
                                 scheduleReconfiguration(schInfo, job, iJob, reconfJobResources);
+                                schInfo->nExpands ++;
                             }
                             else{
                                 scheduleReconfiguration(schInfo, job, iJob, topoJobResources);
-                                schInfo->nKeeps++;
+                                schInfo->nExpandsTopo++;
                             }
-                            schInfo->nExpands ++;
                             
                             // job reconfigured
                             jobReconfigured = 1;
@@ -1051,12 +1052,13 @@ void expand_topology(schInfo_t *schInfo){
 
                                 deallocateJobResourcesStruct(&(topoJobResources));
                                 scheduleReconfiguration(schInfo, job, iJob, reconfJobResources);
+                                schInfo->nExpands ++;
                             }
                             else{
                                 scheduleReconfiguration(schInfo, job, iJob, topoJobResources);
-                                schInfo->nKeeps++;
+                                schInfo->nExpandsTopo++;
                             }
-                            schInfo->nExpands ++;
+                            
                             
                             // job reconfigured
                             jobReconfigured = 1;

@@ -981,7 +981,9 @@ void initResourceMonitor(schInfo_t *schInfo, size_t nBatches){
     // number of reconfigurations
     schInfo->nReconfigurations = 0;
     schInfo->nExpands = 0;
+    schInfo->nExpandsTopo = 0;
     schInfo->nShrinks = 0;
+    schInfo->nShrinksTopo = 0;
     schInfo->nKeeps = 0;
 
     // initialize final values
@@ -1009,6 +1011,8 @@ void initResourceMonitor(schInfo_t *schInfo, size_t nBatches){
     schInfo->finalNReconfigurations = (double*)calloc(nBatches, sizeof(double));
     schInfo->finalNExpands = (double*)calloc(nBatches, sizeof(double));
     schInfo->finalNShrinks = (double*)calloc(nBatches, sizeof(double));
+    schInfo->finalNExpandsTopo = (double*)calloc(nBatches, sizeof(double));
+    schInfo->finalNShrinksTopo = (double*)calloc(nBatches, sizeof(double));
     schInfo->finalNKeeps = (double*)calloc(nBatches, sizeof(double));
     // job execution and wait times
     schInfo->finalMeanExecutionTime = (double*)calloc(nBatches, sizeof(double));

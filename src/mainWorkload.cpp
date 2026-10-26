@@ -151,7 +151,9 @@ void storeBatchResultsInFile(schInfo_t *schInfo, FILE *fOutput, size_t batch, si
     
     fprintf(fOutput, " - Reconfigurations = %u\n", schInfo->nReconfigurations);
     fprintf(fOutput, " - Expands = %u\n", schInfo->nExpands);
+    fprintf(fOutput, " - ExpandsTopo = %u\n", schInfo->nExpandsTopo);
     fprintf(fOutput, " - Shrinks = %u\n", schInfo->nShrinks);
+    fprintf(fOutput, " - ShrinksTopo = %u\n", schInfo->nShrinksTopo);
     fprintf(fOutput, " - Keeps = %u\n", schInfo->nKeeps);
     fprintf(fOutput, "\n\n");
 
@@ -159,7 +161,9 @@ void storeBatchResultsInFile(schInfo_t *schInfo, FILE *fOutput, size_t batch, si
     // store results
     schInfo->finalNReconfigurations[batch] = (double)schInfo->nReconfigurations;
     schInfo->finalNExpands[batch] = (double)schInfo->nExpands;
+    schInfo->finalNExpandsTopo[batch] = (double)schInfo->nExpandsTopo;
     schInfo->finalNShrinks[batch] = (double)schInfo->nShrinks;
+    schInfo->finalNShrinks[batch] = (double)schInfo->nShrinksTopo;
     schInfo->finalNKeeps[batch] = (double)schInfo->nKeeps;
 
     fflush(fOutput);
@@ -188,7 +192,9 @@ void storeFinalResultsInFile(schInfo_t *schInfo, FILE *fOutput, size_t nBatches)
    
     double nReconf = 0.0;
     double nExpands = 0.0;
+    double nExpandsTopo = 0.0;
     double nShrinks = 0.0;
+    double nShrinksTopo = 0.0;
     double nKeeps = 0.0;
     double meanFinalExecutionTime = 0.0;
     double meanFinalWaitTime = 0.0;
@@ -202,7 +208,9 @@ void storeFinalResultsInFile(schInfo_t *schInfo, FILE *fOutput, size_t nBatches)
         meanFinalAllocationArea += schInfo->finalAllocationArea[batch];
         nReconf += schInfo->finalNReconfigurations[batch];
         nExpands += schInfo->finalNExpands[batch];
+        nExpandsTopo += schInfo->finalNExpandsTopo[batch];
         nShrinks += schInfo->finalNShrinks[batch];
+        nShrinksTopo += schInfo->finalNShrinksTopo[batch];
         nKeeps += schInfo->finalNKeeps[batch];
 
         meanFinalExecutionTime += schInfo->finalMeanExecutionTime[batch];
@@ -265,7 +273,9 @@ void storeFinalResultsInFile(schInfo_t *schInfo, FILE *fOutput, size_t nBatches)
     fprintf(fOutput, " - Mean wait time = %lf\n", meanFinalWaitTime / (double)(nBatches));
     fprintf(fOutput, " - Reconfigurations = %lf\n", nReconf);
     fprintf(fOutput, " - Expands = %lf\n", nExpands);
+    fprintf(fOutput, " - ExpandsTopo = %lf\n", nExpandsTopo);
     fprintf(fOutput, " - Shrinks = %lf\n", nShrinks);
+    fprintf(fOutput, " - ShrinksTopo = %lf\n", nShrinksTopo);
     fprintf(fOutput, " - Keeps = %lf\n", nKeeps);
     fprintf(fOutput, "\n\n");
     fflush(fOutput);
